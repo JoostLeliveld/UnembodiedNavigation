@@ -13,6 +13,7 @@ import csv
 import hashlib
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +22,27 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src/unav_common"))
 from unav_common.correction_ledger import validate_correction_ledger
+
+
+def stored_artifact(path: Path) -> Path | None:
+    """Resolve a plain artifact or its losslessly compressed campaign form."""
+    path = Path(path)
+    if path.is_file():
+        return path
+    compressed = path.with_name(path.name + ".zst")
+    return compressed if compressed.is_file() else None
+
+
+def jsonl_text(path: Path) -> str:
+    stored = stored_artifact(path)
+    if stored is None:
+        raise FileNotFoundError(path)
+    if stored.suffix != ".zst":
+        return stored.read_text()
+    return subprocess.run(
+        ["zstd", "-q", "-d", "-c", str(stored)],
+        check=True, capture_output=True, text=True,
+    ).stdout
 
 class PosteriorUnavailable(ValueError):
     """The log does not contain an identifiable committed posterior."""
@@ -41,7 +63,7 @@ class TruthSeries:
         keep = np.r_[True, np.diff(t) != 0]
         for i in np.flatnonzero(~keep):
             a, b = np.array([x[i-1], y[i-1], yaw[i-1]]), np.array([x[i], y[i], yaw[i]])
-            if not np.array_equal(a, b, equal_nan=True):
+            if not np.allclose(a, b, rtol=0.0, atol=1e-9, equal_nan=True):
                 raise ValueError("conflicting ground truth samples at one timestamp")
         self.t, self.x, self.y, self.yaw = (v[keep] for v in (t, x, y, yaw))
         # Unwrap separately across missing heading sections; a missing yaw must not
@@ -475,8 +497,10 @@ def verify_frozen_entry(entry, required, *, minimum_schema=4, repo=REPO):
     if missing:
         raise ValueError(f"{run}: frozen artifact hashes missing: {sorted(missing)}")
     for name, expected in files.items():
-        path = (run / name).resolve()
-        if not path.is_relative_to(run) or not isinstance(expected, str) or len(expected) != 64:
+        logical = (run / name).resolve()
+        path = stored_artifact(logical)
+        if (not logical.is_relative_to(run) or path is None
+                or not isinstance(expected, str) or len(expected) != 64):
             raise ValueError(f"{run}: invalid frozen artifact entry {name}")
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
             raise ValueError(f"{run}: changed frozen artifact {name}")
@@ -530,7 +554,8 @@ def measured_odometry(table, *, start=None, stop=None):
 
 def camera_opportunities(run):
     """Canonical detector deliveries, verified before time/reference filtering."""
-    deliveries = [json.loads(line) for line in (Path(run) / "camera_opportunities.jsonl").read_text().splitlines()]
+    deliveries = [json.loads(line) for line in jsonl_text(
+        Path(run) / "camera_opportunities.jsonl").splitlines()]
     groups = {}
     duplicates = 0
     for row in deliveries:

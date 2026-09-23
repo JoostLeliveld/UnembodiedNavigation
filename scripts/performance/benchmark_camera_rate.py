@@ -77,7 +77,7 @@ def stop_gz(timeout_s: float = 25.0) -> bool:
     return not gz_server_pids()
 
 
-def measure_once(world: str, log_dir: Path, tag: str) -> float:
+def measure_once(world: str, log_dir: Path, tag: str, nvidia_offload: bool) -> float:
     """One launch-measure-teardown cycle. Returns the delivered rate in Hz."""
     if gz_server_pids():
         raise SystemExit(
@@ -90,6 +90,7 @@ def measure_once(world: str, log_dir: Path, tag: str) -> float:
     cmd = [
         "ros2", "launch", "sim", "bringup_sim.launch.py",
         f"world:={world}", "world_name:=warehouse_v2", "headless:=true",
+        f"nvidia_offload:={'true' if nvidia_offload else 'false'}",
         "reset_world:=false", "use_lidar:=false", "bridge_scan:=false",
         "bridge_contacts:=true",
         "bridge_camera_a:=true", "bridge_camera_b:=true", "bridge_camera_c:=true",
@@ -137,6 +138,10 @@ def main() -> None:
                     help="world SDF filename under sim/gazebo_worlds/worlds "
                          "(repeat the flag to compare worlds)")
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument(
+        "--nvidia-offload", choices=("true", "false"), default="true",
+        help="select the same Gazebo PRIME-offload launch path used in campaigns",
+    )
     ap.add_argument("--out", default=None,
                     help="directory for logs and the JSON result")
     a = ap.parse_args()
@@ -154,7 +159,8 @@ def main() -> None:
     for rep in range(a.repeats):
         for world in a.world:
             tag = f"{Path(world).stem}_r{rep}"
-            rate = measure_once(world, out, tag)
+            rate = measure_once(
+                world, out, tag, nvidia_offload=(a.nvidia_offload == "true"))
             results[world].append(rate)
             print(f"  {world:34s} rep {rep}: {rate:5.2f} Hz", flush=True)
 
@@ -189,7 +195,8 @@ def main() -> None:
 
     (out / "camera_rate.json").write_text(json.dumps({
         "topic": TOPIC, "settle_s": SETTLE_S, "sample_s": SAMPLE_S,
-        "repeats": a.repeats, "results": summary,
+        "repeats": a.repeats, "nvidia_offload": a.nvidia_offload,
+        "results": summary,
     }, indent=2))
     print(f"\nwrote {out / 'camera_rate.json'}")
 

@@ -30,14 +30,17 @@ union (so a corridor that does not actually connect start and goal is rejected).
 from __future__ import annotations
 
 import json
+import math
 KEEPOUT_MODEL = 'keepout_region'
 
 from typing import List, Tuple, Sequence
 import numpy as np
 
 from .occlusion_geometry import scene_from_json, signed_distance_to_union_xy
+from .rectangular_footprint import RectangularFootprint
 
 XY = Tuple[float, float]
+SHORT_START_CONNECTOR_M = 0.10
 
 
 def _horizontal_corridor_centres(prisms) -> List[float]:
@@ -151,6 +154,25 @@ def _dedupe(points: Sequence[XY]) -> List[XY]:
     return out
 
 
+def _has_collinear_retracing(points: Sequence[XY]) -> bool:
+    """Return whether a route reverses along the same straight segment.
+
+    A corridor outside both endpoint ordinates can otherwise produce
+    ``a -> b -> c`` on one vertical lane, with ``b`` beyond ``c``.  That seed
+    drives down a lane and immediately retraces it.  It is not a distinct
+    topological route and can be favoured spuriously by an information cost.
+    """
+    route = _dedupe(points)
+    for a, b, c in zip(route, route[1:], route[2:]):
+        ab = np.asarray(b, dtype=float) - np.asarray(a, dtype=float)
+        bc = np.asarray(c, dtype=float) - np.asarray(b, dtype=float)
+        cross = float(ab[0] * bc[1] - ab[1] * bc[0])
+        scale = max(1.0, float(np.linalg.norm(ab) * np.linalg.norm(bc)))
+        if abs(cross) <= 1e-9 * scale and float(np.dot(ab, bc)) < 0.0:
+            return True
+    return False
+
+
 def _route_for_corridor(
     prisms,
     vertical_centres: Sequence[float],
@@ -198,7 +220,23 @@ def _route_for_corridor(
                 _segment_free(prisms, a, b, keep_out=keep_out)
                 for a, b in zip(points, points[1:])
             ):
-                return points[1:]
+                if _has_collinear_retracing(points):
+                    continue
+                route = points[1:]
+                # A tiny snap from the real start to a nearby lane centre can
+                # force a turn-move-turn manoeuvre at the site boundary.  It is
+                # only a graph discretisation artifact, not a distinct route
+                # basin. Collapse it when the direct segment to the following
+                # waypoint is geometry-free. This rule is map-only and is
+                # therefore identical for every camera-network condition.
+                if (len(route) >= 2
+                        and float(np.linalg.norm(
+                            np.asarray(route[0]) - np.asarray(start)
+                        )) <= SHORT_START_CONNECTOR_M
+                        and _segment_free(
+                            prisms, start, route[1], keep_out=keep_out)):
+                    route = route[1:]
+                return route
     return None
 
 
@@ -252,6 +290,24 @@ def generate_route_seeds(
         )) is not None
     ]
 
+    # Prefer cross-aisles that lie between the endpoint ordinates. If at least
+    # one such route is feasible, a corridor beyond both endpoints is not a
+    # distinct necessary detour: it first drives away from the goal and can be
+    # exploited as an information-gathering excursion. Retain outside-band
+    # corridors only when map geometry leaves no progressing alternative.
+    all_valid = valid_below + valid_centred + valid_above
+    y_low, y_high = sorted((start[1], goal[1]))
+    progressing = [(y, route) for y, route in all_valid
+                   if y_low - 1e-6 <= y <= y_high + 1e-6]
+    if progressing:
+        allowed = {round(float(y), 6) for y, _route in progressing}
+        valid_below = [(y, route) for y, route in valid_below
+                       if round(float(y), 6) in allowed]
+        valid_centred = [(y, route) for y, route in valid_centred
+                         if round(float(y), 6) in allowed]
+        valid_above = [(y, route) for y, route in valid_above
+                       if round(float(y), 6) in allowed]
+
     routes: List[dict] = []
     for index, (y, waypoints) in enumerate(valid_below):
         if len(valid_below) == 1 or index == len(valid_below) - 1:
@@ -289,6 +345,116 @@ def generate_route_seeds(
 def generate_route_seeds_json(driveable_geometry_json: str, start_xy, goal_xy) -> str:
     import json
     return json.dumps(generate_route_seeds(driveable_geometry_json, start_xy, goal_xy))
+
+
+def _turn_drive_route_clearance(
+    points: Sequence[XY], start_yaw: float,
+    collision: RectangularFootprint, boundary: RectangularFootprint,
+) -> float:
+    """Exact clearance of a rotate-then-translate waypoint initialization."""
+    points = _dedupe(points)
+    if len(points) < 2:
+        return -math.inf
+    pose = np.asarray([points[0][0], points[0][1], float(start_yaw)], dtype=float)
+    minimum = min(collision.clearance(pose), boundary.clearance(pose))
+    for destination in points[1:]:
+        delta = np.asarray(destination, dtype=float) - pose[:2]
+        distance = float(np.linalg.norm(delta))
+        if distance <= 1e-9:
+            continue
+        target_yaw = math.atan2(float(delta[1]), float(delta[0]))
+        yaw_delta = (target_yaw - pose[2] + math.pi) % (2.0 * math.pi) - math.pi
+        turned = pose.copy(); turned[2] += yaw_delta
+        minimum = min(
+            minimum,
+            collision.sweep_clearance(pose, turned, yaw_delta=yaw_delta),
+            boundary.sweep_clearance(pose, turned, yaw_delta=yaw_delta),
+        )
+        arrived = np.asarray([destination[0], destination[1], turned[2]], dtype=float)
+        minimum = min(
+            minimum,
+            collision.sweep_clearance(turned, arrived, yaw_delta=0.0),
+            boundary.sweep_clearance(turned, arrived, yaw_delta=0.0),
+        )
+        pose = arrived
+    return float(minimum)
+
+
+def repair_route_seeds_for_footprint(
+    seeds: Sequence[dict], collision_geometry_json: str,
+    driveable_geometry_json: str, start_pose: Sequence[float],
+    *, robot_length_m: float = 0.80, robot_width_m: float = 0.55,
+    target_clearance_m: float = 0.02, lateral_step_m: float = 0.025,
+    lateral_limit_m: float = 0.75,
+) -> List[dict]:
+    """Repair only footprint-invalid vertical columns by a minimal lateral shift.
+
+    Route topology and the selected horizontal corridor remain unchanged.  The
+    search uses physical geometry only, is deterministic, and is therefore
+    common to every camera-network arm.  Already hard-valid seeds are preserved
+    exactly; the small positive target only prevents a repaired seed from being
+    left numerically tangent to hard geometry.  It is not a soft-cost rule.
+    """
+    start = np.asarray(start_pose, dtype=float)
+    if start.shape != (3,) or not np.isfinite(start).all():
+        raise ValueError('start_pose must be finite [x,y,yaw]')
+    if not all(np.isfinite([target_clearance_m, lateral_step_m, lateral_limit_m])):
+        raise ValueError('repair distances must be finite')
+    if target_clearance_m < 0 or lateral_step_m <= 0 or lateral_limit_m < lateral_step_m:
+        raise ValueError('invalid repair distances')
+    collision_scene = scene_from_json(collision_geometry_json)
+    boundary_scene = scene_from_json(driveable_geometry_json)
+    collision = RectangularFootprint(
+        collision_scene.prisms, robot_length_m, robot_width_m)
+    boundary = RectangularFootprint(
+        boundary_scene.prisms, robot_length_m, robot_width_m, keep_in=True)
+    repaired = []
+    offsets = []
+    for magnitude in np.arange(lateral_step_m, lateral_limit_m + 1e-12,
+                               lateral_step_m):
+        offsets.extend((float(magnitude), -float(magnitude)))
+    for seed in seeds:
+        original = [(float(start[0]), float(start[1]))] + [
+            (float(point[0]), float(point[1])) for point in seed['waypoints']]
+        clearance = _turn_drive_route_clearance(
+            original, float(start[2]), collision, boundary)
+        if clearance >= 0.0:
+            repaired.append({**seed, 'footprint_seed_clearance_m': clearance,
+                             'geometry_repaired': False})
+            continue
+        candidates = []
+        for index, (first, second) in enumerate(zip(original, original[1:])):
+            if abs(first[0] - second[0]) > 1e-9 or abs(first[1] - second[1]) <= 1e-9:
+                continue
+            for offset in offsets:
+                shifted_x = first[0] + offset
+                variant = list(original[:index])
+                if index == 0:
+                    variant.append(original[0])
+                variant.extend(((shifted_x, first[1]), (shifted_x, second[1])))
+                variant.extend(original[index + 2:])
+                if variant[-1] != original[-1]:
+                    variant.append(original[-1])
+                variant = _dedupe(variant)
+                value = _turn_drive_route_clearance(
+                    variant, float(start[2]), collision, boundary)
+                if value >= target_clearance_m:
+                    candidates.append((abs(offset), -value, shifted_x, variant))
+                    break
+        if not candidates:
+            repaired.append({**seed, 'footprint_seed_clearance_m': clearance,
+                             'geometry_repaired': False,
+                             'geometry_repair_failed': True})
+            continue
+        _magnitude, negative_clearance, shifted_x, best = min(candidates)
+        repaired.append({
+            **seed,
+            'waypoints': [list(point) for point in best[1:]],
+            'footprint_seed_clearance_m': -negative_clearance,
+            'geometry_repaired': True,
+            'repaired_vertical_x_m': shifted_x,
+        })
+    return repaired
 
 
 def _remove_collinear(points: Sequence[XY], *, tol: float = 1e-9) -> List[XY]:

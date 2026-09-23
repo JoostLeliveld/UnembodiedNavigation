@@ -115,16 +115,36 @@ def test_geometric_route_states_include_start_and_corner_headings():
     assert states[1, 2] == pytest.approx(0.0)
 
 
-def test_ff_fb_pivots_slowly_for_a_true_reversal():
+def test_ff_fb_pivots_only_for_a_near_reversal():
     assert _ff_fb_forward_speed(
-        0.25, 0.30, -1.5, -1.49, v_max=1.0, yaw_gate_rad=0.60
+        0.30, 0.30, -0.8, 2.70, v_max=1.0, yaw_gate_rad=0.65,
+        crawl_speed_mps=0.18, pivot_heading_error_rad=2.60,
     ) == 0.0
 
 
-def test_ff_fb_uses_crawl_arc_for_moderate_heading_error():
-    assert _ff_fb_forward_speed(
-        0.25, 0.30, -0.5, -0.5, v_max=1.0, yaw_gate_rad=0.30
-    ) == pytest.approx(0.05)
+def test_ff_fb_reduces_speed_smoothly_for_moderate_heading_error():
+    at_gate = _ff_fb_forward_speed(
+        0.30, 0.30, -0.8, 0.65, v_max=1.0, yaw_gate_rad=0.65,
+        crawl_speed_mps=0.18, pivot_heading_error_rad=2.60,
+    )
+    through_turn = _ff_fb_forward_speed(
+        0.30, 0.30, -0.8, 1.20, v_max=1.0, yaw_gate_rad=0.65,
+        crawl_speed_mps=0.18, pivot_heading_error_rad=2.60,
+    )
+    right_angle = _ff_fb_forward_speed(
+        0.30, 0.30, -0.8, np.pi / 2.0, v_max=1.0, yaw_gate_rad=0.65,
+        crawl_speed_mps=0.18, pivot_heading_error_rad=2.60,
+    )
+    assert at_gate > through_turn > right_angle > 0.0
+    assert right_angle == pytest.approx(0.18)
+
+
+def test_ff_fb_uses_arc_for_a_nominal_right_angle_corner():
+    speed = _ff_fb_forward_speed(
+        0.30, 0.30, 0.8, np.pi / 2.0, v_max=1.0, yaw_gate_rad=0.65,
+        crawl_speed_mps=0.18, pivot_heading_error_rad=2.60,
+    )
+    assert speed == pytest.approx(0.18)
 
 
 def test_ff_fb_keeps_one_metre_per_second_on_aligned_straight():
@@ -167,10 +187,9 @@ def test_ff_fb_corner_capture_brakes_before_tight_ninety_degree_turn():
     controls = EfeAgentNode._ff_fb_plan(
         node, np.asarray((0.81, 0.0, 0.0)),
     )
-    # At 19 cm from a retained corner the old preview-only rule allowed about
-    # 0.66 m/s.  Point-capture braking limits the immediately held command so
-    # estimator lag cannot carry the body through the outside of the turn.
-    assert controls[0, 0] <= 0.152 + 1.0e-9
+    # The fillet remains a moving arc, but heading-based reduction prevents the
+    # robot from carrying straight-line speed through the outside of the turn.
+    assert 0.18 < controls[0, 0] < 0.50
 
 
 def test_ff_fb_path_guidance_preserves_centreline_speed():

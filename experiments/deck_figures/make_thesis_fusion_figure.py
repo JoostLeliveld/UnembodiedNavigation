@@ -40,32 +40,23 @@ def main() -> None:
             or report.get("sample_unit") != "position-heading camera batch"):
         raise RuntimeError("final-audit fusion report is not valid")
 
-    methods = tuple(LABELS)
-    rmse = [100.0 * report["metrics"][name]["rmse_m"] for name in methods]
-    fig, axes = plt.subplots(1, 2, figsize=(7.16, 2.8), constrained_layout=True)
-
-    bars = axes[0].bar(np.arange(len(methods)), rmse,
-                       color=[COLOURS[name] for name in methods], width=0.68)
-    axes[0].set_xticks(np.arange(len(methods)), [LABELS[name] for name in methods],
-                       rotation=25, ha="right")
-    axes[0].set(ylabel="fused RMSE (cm)", title="(a) All matched batches")
-    for bar, value in zip(bars, rmse, strict=True):
-        axes[0].text(bar.get_x() + bar.get_width() / 2, value + 0.06,
-                     f"{value:.2f}", ha="center", va="bottom", fontsize=6.8)
-
+    # Panel (a) of earlier versions repeated the aggregate RMSE column of the
+    # fusion table verbatim, so it is not drawn. Only the breakdown by camera
+    # count, which no table carries, is plotted.
     counts = (2, 3, 4)
     compared = ("equal", "global", "per_camera", "spatial")
+    fig, axis = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+    axes = [axis]
     x = np.arange(len(counts), dtype=float)
     width = 0.19
     for index, name in enumerate(compared):
         values = [100.0 * report["by_camera_count"][name][str(count)]["rmse_m"]
                   for count in counts]
-        axes[1].bar(x + (index - 1.5) * width, values, width=width,
-                    color=COLOURS[name], label=LABELS[name])
-    axes[1].set_xticks(x, [str(value) for value in counts])
-    axes[1].set(xlabel="admitted cameras", ylabel="fused RMSE (cm)",
-                title="(b) Result by camera count")
-    axes[1].legend(frameon=False, fontsize=6.5, ncol=2)
+        axis.bar(x + (index - 1.5) * width, values, width=width,
+                 color=COLOURS[name], label=LABELS[name])
+    axis.set_xticks(x, [str(value) for value in counts])
+    axis.set(xlabel="admitted cameras", ylabel="fused RMSE (cm)")
+    axis.legend(frameon=False, fontsize=6.5, ncol=2)
 
     for axis in axes:
         axis.grid(axis="y", color="#dddddd", lw=0.5)
