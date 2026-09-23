@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Fit and validate the Bayesian R0, R1 and R2 models (inverse-Wishart posterior mean).
+"""The one R0/R1/R2 family: inverse-Wishart posterior-mean covariances of the corrected residuals.
 
-Promoted on 2026-09-23 from 2026-09-21/i-ah/work/fit_final_bayesian_r012.py, which fitted
-logs/track_a_draft/final_bayesian. The method is unchanged. Only the input and
-output paths became arguments.
+R0 is global, R1 per camera, R2 per camera and spatial (16 neighbours, 0.4 m Gaussian
+length scale, fixed by the method), all in the camera-to-query ray frame with the same broad
+prior. Fitted on D_R and scored on D_dev; D_eval is never read. This is the covariance the
+runtime fuses with and the planner inverts.
 
-    python3 pipeline/fit_covariance.py \
-      --source CAMPAIGN/covariance/corrected_residuals.npz --output CAMPAIGN/bayesian_covariance
+    python3 pipeline/fit_covariance.py --residuals FITS/corrected_residuals --output FITS/covariance
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
@@ -21,12 +22,19 @@ import numpy as np
 from scipy.stats import chi2
 
 
+REPO = Path(__file__).resolve().parents[1]
 CAMERAS = tuple(f"camera_{letter}" for letter in "ABCDE")
 D = 2
 PRIOR_STD_M = 10.0
 PRIOR_STRENGTH = 2.5e-6
 PRIOR_COVARIANCE = PRIOR_STD_M ** 2 * np.eye(D)
 PRIOR_SCATTER = PRIOR_STRENGTH * PRIOR_COVARIANCE
+# Spatial R2 constants, fixed by the method (not selected on data): 16 neighbours and a
+# 0.4 m Gaussian length scale. The v8 top-up density K / (pi (2 l)^2) = 8 positions per m^2
+# was derived from these same values. The grid below is reported as a sensitivity table
+# on D_dev only; it never chooses the model.
+R2_K_NEIGHBORS = 16
+R2_LENGTH_SCALE_M = 0.4
 K_GRID = (8, 16, 32)
 LENGTH_GRID_M = (0.2, 0.3, 0.4, 0.6, 1.0, 1.4)
 CHI95 = float(chi2.ppf(0.95, D))
@@ -118,12 +126,20 @@ def matrix_summary(matrix):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--residuals", type=Path, required=True,
+                        help="output folder of pipeline/corrected_residuals.py")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    SOURCE, OUTPUT = args.source.resolve(), args.output.resolve()
-    if OUTPUT.exists():
-        raise FileExistsError(OUTPUT)
+    residuals, final_output = args.residuals.resolve(), args.output.resolve()
+    OUTPUT = final_output.with_name(final_output.name + ".incomplete")
+    if final_output.exists() or OUTPUT.exists():
+        raise FileExistsError(final_output if final_output.exists() else OUTPUT)
+    residual_manifest_path = residuals / "manifest.json"
+    residual_manifest = json.loads(residual_manifest_path.read_text(encoding="utf-8"))
+    record = residual_manifest["artifacts"]["residuals"]
+    SOURCE = residuals / record["path"]
+    if sha256(SOURCE) != record["sha256"]:
+        raise RuntimeError(f"corrected residuals hash drift: {SOURCE}")
     OUTPUT.mkdir(parents=True)
     with np.load(SOURCE, allow_pickle=False) as source:
         data = {name: np.asarray(source[name]) for name in source.files}
@@ -175,21 +191,14 @@ def main():
             }
             candidates.append(candidate)
             cache[(k, length)] = (covariance, support, score)
-    calibrated = [
-        row for row in candidates
-        if abs(row["equal_position_95pct_coverage"] - 0.95) <= 0.01
-    ]
-    selection_pool = calibrated or candidates
-    selected = min(selection_pool, key=lambda row: (
-        row["equal_position_mean_nll"],
-        abs(row["equal_position_95pct_coverage"] - 0.95),
-        row["k_neighbors"], row["length_scale_m"],
-    ))
+    selected = next(row for row in candidates
+                    if row["k_neighbors"] == R2_K_NEIGHBORS
+                    and row["length_scale_m"] == R2_LENGTH_SCALE_M)
     dev_r2, dev_support, r2_metrics = cache[
         (selected["k_neighbors"], selected["length_scale_m"])
     ]
 
-    model_path = OUTPUT / "bayesian_r012_models.npz"
+    model_path = OUTPUT / "models.npz"
     np.savez_compressed(
         model_path,
         camera_order=np.asarray(CAMERAS),
@@ -205,10 +214,12 @@ def main():
     )
     report = {
         "schema": "final_bayesian_r012_fit.v1",
-        "status": "fit_on_D_R_selected_on_D_dev",
+        "status": "fit_on_D_R_evaluated_on_D_dev",
         "roles_accessed": ["D_R", "D_dev"],
         "D_eval_accessed": False,
-        "source": {"path": str(SOURCE), "sha256": sha256(SOURCE)},
+        "source": {"residuals_manifest": str(residual_manifest_path.relative_to(REPO)),
+                   "residuals_manifest_sha256": sha256(residual_manifest_path),
+                   "residuals_sha256": record["sha256"]},
         "parameterization": "posterior mean of proper inverse-Wishart covariance model",
         "runtime_frame": "camera-to-query ray frame",
         "position_weighting": "average second moment within physical position, then equal position weight",
@@ -221,11 +232,11 @@ def main():
             "workspace_diagonal_m": float(np.hypot(21.4, 17.4)),
             "isotropic_95pct_radius_m": float(np.sqrt(CHI95) * PRIOR_STD_M),
         },
-        "selection": {
-            "role": "D_dev",
-            "rule": "minimum equal-position Gaussian NLL among candidates within one percentage point of 95-percent coverage",
+        "r2_constants": {"k_neighbors": R2_K_NEIGHBORS, "length_scale_m": R2_LENGTH_SCALE_M,
+                         "rule": "fixed by the method; not selected on data"},
+        "sensitivity_on_D_dev": {
             "candidate_grid": {"k_neighbors": K_GRID, "length_scale_m": LENGTH_GRID_M},
-            "selected_R2": selected,
+            "used_model": selected,
             "all_candidates": candidates,
         },
         "fit": {
@@ -257,13 +268,12 @@ def main():
         },
         "artifacts": {"models": {"path": model_path.name, "sha256": sha256(model_path)}},
     }
-    report_path = OUTPUT / "report.json"
+    report_path = OUTPUT / "manifest.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({
-        "selected_R2": selected,
-        "D_dev_metrics": report["D_dev_metrics"],
-        "report": str(report_path),
-    }, indent=2))
+    (OUTPUT / ".complete").write_text(json.dumps({"manifest_sha256": sha256(report_path)}) + "\n")
+    os.replace(OUTPUT, final_output)
+    print(json.dumps({"R2": selected, "D_dev_metrics": report["D_dev_metrics"],
+                      "manifest": str(final_output / report_path.name)}, indent=2))
 
 
 if __name__ == "__main__":

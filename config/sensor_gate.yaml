@@ -6,7 +6,7 @@
 # has no expected-size, learned-quality, belief, innovation, NIS, association, tracking,
 # or localizer-acceptance input.
 
-gate_id: commissioning_sensor_gate_v3
+gate_id: sensor_gate
 
 image_width_px: 1280
 image_height_px: 720

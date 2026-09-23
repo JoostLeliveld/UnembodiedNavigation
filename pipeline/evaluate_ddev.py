@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build the sealed D_dev correction/covariance evaluation, including Rproj."""
+"""D_dev evaluation of the runtime covariances R0/R1/R2 and of the R_proj baseline.
+
+R0/R1/R2 are the models pipeline/fit_covariance.py fitted (the ones the runtime fuses with);
+R2 is rebuilt here exactly as the runtime queries it. R_proj propagates sigma_px^2 I2 through
+the pixel-to-ground Jacobian; sigma_px is fitted on D_R. Per-position scores and a figure.
+"""
 from __future__ import annotations
 
 import argparse
@@ -19,14 +24,43 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / "src/reliability"), str(REPO / "src/unav_common"), str(REPO)]
-from pipeline.corrected_residuals import (  # noqa: E402
-    CAMERAS, metrics, psd, spatial_predict,
-)
+from pipeline.fit_covariance import CAMERAS, local_statistics, posterior_mean  # noqa: E402
 from pipeline.dataset import load_rows  # noqa: E402
 from reliability.contracts import CameraObservation  # noqa: E402
 from reliability.projection import (  # noqa: E402
     camera_model_from_world, project_observation_to_world_with_covariance,
 )
+
+
+EIGENVALUE_FLOOR_M2 = 1.0e-6
+
+
+def psd(matrix: np.ndarray) -> np.ndarray:
+    eig, vec = np.linalg.eigh(0.5 * (matrix + matrix.T))
+    return (vec * np.maximum(eig, EIGENVALUE_FLOOR_M2)) @ vec.T
+
+
+def metrics(residual, covariance, position):
+    nll, nis = [], []
+    for value, matrix in zip(residual, covariance):
+        matrix = psd(matrix); inverse = np.linalg.inv(matrix)
+        score = float(value @ inverse @ value)
+        nis.append(score)
+        nll.append(0.5 * (math.log(np.linalg.det(matrix)) + score + 2 * math.log(2 * math.pi)))
+    nll, nis = np.asarray(nll), np.asarray(nis)
+    by_position = []
+    for key in sorted(set(position.tolist())):
+        use = position == key
+        by_position.append((float(nll[use].mean()), float(nis[use].mean()), float((nis[use] <= 5.991).mean())))
+    return {
+        "observations": len(residual), "positions": len(by_position),
+        "equal_position_mean_nll": float(np.mean([x[0] for x in by_position])),
+        "equal_position_mean_nis": float(np.mean([x[1] for x in by_position])),
+        "equal_position_95pct_coverage": float(np.mean([x[2] for x in by_position])),
+        "pooled_mean_nll": float(nll.mean()), "pooled_mean_nis": float(nis.mean()),
+        "pooled_95pct_coverage": float((nis <= 5.991).mean()),
+        "mean_logdet": float(np.mean([math.log(np.linalg.det(psd(x))) for x in covariance])),
+    }
 
 
 def sha256(path: Path) -> str:
@@ -128,17 +162,17 @@ def main() -> int:
 
     r0_cov = np.repeat(r0[None], int(dev.sum()), axis=0)
     r1_cov = np.stack([r1[str(camera)] for camera in data["camera"][dev]])
-    r2_cov = spatial_predict(
-        model["spatial_reference_xy_m"], model["spatial_camera"],
+    r2_cov = posterior_mean(*local_statistics(
+        model["spatial_reference_xy_m"], model["spatial_camera"].astype(str),
         model["spatial_second_moment_ray_m2"], data["corrected_xy_m"][dev],
-        data["camera"][dev], int(model["k_neighbors"][0]),
+        data["camera"][dev].astype(str), int(model["k_neighbors"][0]),
         float(model["length_scale_m"][0]),
-    )
+    ))
     rproj_cov = sigma_px ** 2 * unit[dev]
     covariance_by_name = {
         "R0_global_full": (residual_ray[dev], r0_cov),
         "R1_per_camera_full": (residual_ray[dev], r1_cov),
-        "R2_spatial_full": (residual_ray[dev], r2_cov),
+        "R2_spatial_residual": (residual_ray[dev], r2_cov),
         "Rproj_homography_pixel": (data["residual_world_m"][dev], rproj_cov),
     }
     scores = {name: metrics(residual, cov, data["position_key"][dev])

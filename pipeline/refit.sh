@@ -1,7 +1,8 @@
 #!/bin/bash
-# Refit the reference chain on the v8 uniform dataset (amendment 2026-09-23): detector
-# inference, sensor gate, correction, R0/R1/R2, runtime packaging and planning precision. Each stage refuses to overwrite its output, so the script skips any stage
-# whose output already exists and resumes where it stopped.
+# The reference fits, in order: detector inference (frozen YOLO11n), sensor gate, correction
+# (CPU, deterministic), corrected residuals, R0/R1/R2 (K=16, l=0.4 m fixed), D_dev evaluation
+# incl. R_proj, runtime package and planning precision. Each stage refuses to overwrite its
+# output, so a rerun skips finished stages and resumes where it stopped.
 #
 #   bash pipeline/refit.sh
 cd "$(dirname "$0")/.."
@@ -29,17 +30,17 @@ run "$R/gate_dataset" python3 pipeline/gate.py \
   --inference "$INF" --gate "$GATE_CONFIG" --output "$GATE"
 run "$R/correction" python3 pipeline/fit_correction.py \
   --gate-dataset "$GATE" --output "$R/correction"
-run "$R/covariance" python3 pipeline/corrected_residuals.py \
-  --correction "$R/correction" --output "$R/covariance"
+run "$R/corrected_residuals" python3 pipeline/corrected_residuals.py \
+  --correction "$R/correction" --output "$R/corrected_residuals"
+run "$R/covariance" python3 pipeline/fit_covariance.py \
+  --residuals "$R/corrected_residuals" --output "$R/covariance"
 run "$R/ddev_evaluation" python3 pipeline/evaluate_ddev.py \
   --correction "$R/correction" --covariance "$R/covariance" --output "$R/ddev_evaluation"
-run "$R/bayesian_covariance" python3 pipeline/fit_covariance.py \
-  --source "$R/covariance/corrected_residuals.npz" --output "$R/bayesian_covariance"
 run "$R/runtime_r012" python3 pipeline/package_runtime.py \
   --correction-manifest "$R/correction/manifest.json" \
-  --covariance-models "$R/bayesian_covariance/bayesian_r012_models.npz" \
+  --covariance-models "$R/covariance/models.npz" \
   --world src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf --output "$R/runtime_r012"
 run "$R/planning_precision" python3 pipeline/planning_precision.py \
-  --covariance-models "$R/bayesian_covariance/bayesian_r012_models.npz" \
+  --covariance-models "$R/covariance/models.npz" \
   --output "$R/planning_precision"
 log "ALL DONE"
