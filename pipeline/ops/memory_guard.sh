@@ -12,10 +12,14 @@
 #
 # The capture is resumable and the runner passes --resume automatically, so a
 # restart never loses committed rows.
+#   bash pipeline/ops/memory_guard.sh [LIMIT_GB] [LOG] [PROCESS]
+# PROCESS is matched with a bracketed first letter so the guard never matches itself.
 LIMIT_GB="${1:-5.5}"
-LOG=logs/thesis/captures/v5/capture.log
+LOG="${2:-logs/thesis/captures/v5/capture.log}"
+PROCESS="${3:-capture_bbox_grid}"
+PATTERN="[${PROCESS:0:1}]${PROCESS:1}"
 while true; do
-  pid=$(ps -eo pid,args | grep "[c]apture_bbox_grid" | awk '{print $1}' | head -1)
+  pid=$(ps -eo pid,args | grep "$PATTERN" | grep python | awk '{print $1}' | head -1)
   if [ -n "$pid" ]; then
     rss_gb=$(ps -o rss= --pid "$pid" 2>/dev/null | awk '{printf "%.2f",$1/1048576}')
     over=$(awk -v a="${rss_gb:-0}" -v b="$LIMIT_GB" 'BEGIN{print (a>b)?1:0}')
