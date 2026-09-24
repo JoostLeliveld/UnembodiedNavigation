@@ -627,3 +627,40 @@ Decided by the author after the offline replay of the v8 campaign.
   equations are unchanged.
 - **Reruns required.** The campaign and everything downstream of it (analysis, figures,
   drop-ins). Route solving uses no odometry noise and is unaffected.
+
+## Amendment 2026-09-24 (night): targeted capture v10 (lanes and hard views)
+
+Decided by the author, frozen before any v10 image is captured.
+
+- **Why.** Runtime camera errors are larger than the static audit predicts because the robot
+  drives lanes at aisle headings, a pose population the capture covers poorly (about a
+  quarter of route pose cells had a training image within 0.25 m and 15 deg), and the
+  correction's tail is concentrated in hard views. A focused learning curve on v9 (all easy
+  D_mu kept, hard examples subsampled; known answer: 100 % reproduces the frozen v9
+  correction) showed that edge-cut views keep improving with more data, while the
+  bottom-occluded tail does not. No model, feature, gate or covariance method changes.
+- **Rule** (`pipeline/capture/plan_hard_views.py`; campaign routes are never read). Views are
+  classified geometrically (robot box 0.80 x 0.55 x 0.35 m; edge: box within 20 px of the
+  image border; bottom hidden: ray to the footprint centre at 5 cm blocked; small: box under
+  30 px). (1) Lane grid: 0.5 m grid over the driveable region at the four aisle headings,
+  body clearance >= 0.05 m, minus poses already captured within 0.25 m and 15 deg.
+  (2) Spaced hard-view top-up: 0.25 m grid, 8 headings, >= 0.15 m from every sealed-audit
+  position; greedy by edge views toward +75 % edge views per camera, never duplicating an
+  existing or lane pose, top-up positions >= 0.5 m apart, <= 4 headings per position. The
+  spacing leaves the target partly unmet (edge views +44 to +54 % per camera): there are not
+  enough distinct edge positions to go further without clustering. Result: 2260 lane poses
+  + 1521 top-up poses at 1081 positions (`logs/thesis/captures/v10/capture_poses_v10.json`,
+  manifest `capture_plan_manifest.json`).
+- **Validation first.** 40 poses (24 top-up, 16 lane, seeded) are captured separately and
+  checked by `pipeline/capture/check_v10_validation.py` (completeness; planned vs measured
+  view class: edge recall >= 0.90, bottom-hidden recall >= 0.60; known answer on the v9
+  audit: 1.00 and 0.93). The full capture runs only if it passes. Validation images do not
+  enter the dataset.
+- **Roles.** The sealed v9 audit is unchanged and stays sealed. New positions are assigned to
+  D_dev, D_R and D_mu inside the v9 2 x 2 m strata, keeping each stratum's working-set role
+  proportions (largest remainder), ordered by sha256(seed, key) as in the v9 rule. No position
+  is chosen or moved on errors.
+- **Unchanged.** Detector (frozen, not retrained), gate, correction and covariance methods,
+  fixed R2 constants, planner, follower, tasks, seeds, goal rule and collision definition.
+- **Reruns required.** The whole refit chain (the correction is retrained by `refit.sh`),
+  the sealed audit, routes, campaign, analysis and every downstream figure and drop-in.
