@@ -212,6 +212,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('goal_stable_radius', 0.20)
         self.declare_parameter('goal_stable_hold_s', 2.0)
         self.declare_parameter('goal_stable_max_displacement_m', 0.04)
+        # Stuck detection is off inside goal_stable_radius; a belief that stays there
+        # this long without satisfying either goal hold ends the run as its own failure.
+        self.declare_parameter('goal_loiter_timeout_s', 15.0)
         self.declare_parameter('frame_id', 'map_bev')
         self.declare_parameter('frame_sanity_start_tolerance_m', 0.25)
         self.declare_parameter('frame_sanity_start_tolerance_yaw_rad', 0.5)
@@ -429,6 +432,7 @@ class ExperimentLogger(Node):
         self.goal_stable_max_displacement_m = float(
             self.get_parameter('goal_stable_max_displacement_m').value
         )
+        self.goal_loiter_timeout_s = float(self.get_parameter('goal_loiter_timeout_s').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
         self.frame_sanity_start_tolerance_m = float(self.get_parameter('frame_sanity_start_tolerance_m').value)
         self.frame_sanity_start_tolerance_yaw_rad = float(self.get_parameter('frame_sanity_start_tolerance_yaw_rad').value)
@@ -999,6 +1003,7 @@ class ExperimentLogger(Node):
             'goal_stable_radius': self.goal_stable_radius,
             'goal_stable_hold_s': self.goal_stable_hold_s,
             'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
+            'goal_loiter_timeout_s': self.goal_loiter_timeout_s,
             'v_max': self.v_max,
             'use_odom_for_predict': self.use_odom_for_predict,
             'use_diagnostic_odom_localization': self.use_diagnostic_odom_localization,
@@ -1133,6 +1138,7 @@ class ExperimentLogger(Node):
         self.efe_metrics = None
         self._goal_in_radius_since = None
         self._goal_stable_since = None
+        self._goal_loiter_since = None
         self._goal_region_entered = False
         self._goal_region_first_stamp = math.nan
         self._motion_history = deque()
@@ -1894,12 +1900,14 @@ class ExperimentLogger(Node):
         if mission is not None and (not mission.is_final or mission.status != 'active'):
             self._goal_in_radius_since = None
             self._goal_stable_since = None
+            self._goal_loiter_since = None
             return False
         if not (self.auto_stop_on_goal
                 and (self.goal_msg is not None or mission is not None)
                 and math.isfinite(goal_dist)):
             self._goal_in_radius_since = None
             self._goal_stable_since = None
+            self._goal_loiter_since = None
             return False
 
         if goal_dist <= self.goal_success_radius:
@@ -1918,7 +1926,17 @@ class ExperimentLogger(Node):
 
         if goal_dist > self.goal_stable_radius:
             self._goal_stable_since = None
+            self._goal_loiter_since = None
             return False
+        if self._goal_loiter_since is None:
+            self._goal_loiter_since = stamp
+        elif float(stamp - self._goal_loiter_since) >= self.goal_loiter_timeout_s:
+            self.get_logger().info(
+                f"Goal loiter timeout: belief within {self.goal_stable_radius:.3f} m for "
+                f"{float(stamp - self._goal_loiter_since):.2f} s without a goal hold."
+            )
+            self._finish_run("goal_loiter_timeout", stamp)
+            return True
 
         stats = self._motion_window_stats(stamp, self.goal_stable_hold_s)
         stable_at_goal = (
@@ -2143,6 +2161,7 @@ class ExperimentLogger(Node):
             if previous_id and previous_id != mission.goal_id:
                 self._goal_in_radius_since = None
                 self._goal_stable_since = None
+                self._goal_loiter_since = None
                 self._goal_region_entered = False
                 self._goal_region_first_stamp = math.nan
             self._active_mission_goal_id = mission.goal_id
@@ -4201,6 +4220,7 @@ class ExperimentLogger(Node):
             'goal_stable_radius': self.goal_stable_radius,
             'goal_stable_hold_s': self.goal_stable_hold_s,
             'goal_stable_max_displacement_m': self.goal_stable_max_displacement_m,
+            'goal_loiter_timeout_s': self.goal_loiter_timeout_s,
             'goal_region_entered': bool(self._goal_region_entered),
             'goal_region_first_stamp': self._goal_region_first_stamp,
             'goal_region_after_first_cmd_s': goal_region_after_first_cmd_s,

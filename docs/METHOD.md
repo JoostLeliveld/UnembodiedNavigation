@@ -462,6 +462,14 @@ read from the named evidence file; the paper quotes the regenerated artifacts, n
   `ground_truth_pose.csv` (every true-pose sample; consecutive samples are checked with a
   certified sweep). Ground truth never stops a run: a run ends at the goal or at its
   simulated-time limit.
+- **Stopping and success** (author's decision of 2026-09-22 for any rerun). A run stops when
+  the belief holds within 0.10 m of the goal for 2 s (or, fallback, holds still within
+  0.20 m); success is scored offline on ground truth: final goal distance below 0.30 m, no
+  collision, evidence complete, and the run not ended as `stuck`, `goal_loiter_timeout` or
+  timeout. The two radii are never equal, so a terminal belief error cannot turn a stop into
+  a failure. A belief that stays within 0.20 m for 15 s without either hold ends the run as
+  `goal_loiter_timeout` (stuck detection is off there). The time limit is 90 simulated
+  seconds after the first command. These replace the arrival tolerance in §9.
 - **Local execution** follows an admitted global route without re-vetoing its geometry from
   the drifting belief (the last bullet of §9 no longer holds): a re-veto turned localisation
   error into zero-command deadlocks, and the experiment must expose a collision rather than

@@ -1259,6 +1259,8 @@ def _terminal_summary_outcome(summary: dict | None) -> tuple[bool, str, str]:
         return True, 'timeout', reason
     if reason == 'stuck':
         return True, 'stuck', reason
+    if reason == 'goal_loiter_timeout':
+        return True, 'goal_loiter_timeout', reason
     return False, 'infra_invalid', f'unrecognized_terminal_reason:{reason or "missing"}'
 
 
