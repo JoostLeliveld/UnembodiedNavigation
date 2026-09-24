@@ -252,6 +252,7 @@ class ExperimentLogger(Node):
         self.declare_parameter('perception_use_geometry_occlusion', True)
         self.declare_parameter('visibility_geometry_json', '')
         self.declare_parameter('collision_geometry_json', '')
+        self.declare_parameter('robot_collision_radius_m', 0.125)
         self.declare_parameter('robot_length_m', 0.8)
         self.declare_parameter('robot_width_m', 0.55)
         self.declare_parameter('use_command_noise', True)
@@ -517,6 +518,8 @@ class ExperimentLogger(Node):
         )
         self.visibility_geometry_json = str(self.get_parameter('visibility_geometry_json').value)
         self.collision_geometry_json = str(self.get_parameter('collision_geometry_json').value)
+        # Recorded for evidence identity: the planner's no-go term uses it.
+        self.robot_collision_radius_m = float(self.get_parameter('robot_collision_radius_m').value)
         self.robot_length_m = float(self.get_parameter('robot_length_m').value)
         self.robot_width_m = float(self.get_parameter('robot_width_m').value)
         self.use_command_noise = bool(self.get_parameter('use_command_noise').value)
@@ -869,6 +872,7 @@ class ExperimentLogger(Node):
             'visibility_geometry_sha256': _sha256_text(self.visibility_geometry_json),
             'collision_geometry_json': self.collision_geometry_json,
             'collision_geometry_sha256': _sha256_text(self.collision_geometry_json),
+            'robot_collision_radius_m': self.robot_collision_radius_m,
             'robot_length_m': self.robot_length_m, 'robot_width_m': self.robot_width_m,
             'planner_collision_model': 'oriented_rectangle_swept_v1',
             'legacy_geometry_diagnostic_model': 'circle',

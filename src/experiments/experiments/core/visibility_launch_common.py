@@ -1798,6 +1798,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'stuck_max_goal_improvement_m': cfg['stuck_max_goal_improvement_m'],
                 'stuck_cmd_fraction_min': cfg['stuck_cmd_fraction_min'],
                 'stuck_idle_cmd_fraction_max': cfg['stuck_idle_cmd_fraction_max'],
+                'robot_collision_radius_m': cfg['robot_collision_radius_m'],
                 'robot_length_m': cfg.get('robot_length_m', 0.8),
                 'robot_width_m': cfg.get('robot_width_m', 0.55),
                 'use_command_noise': cfg['use_command_noise'],
