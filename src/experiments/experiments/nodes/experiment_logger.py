@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+from contextlib import nullcontext
 import json
 import hashlib
 import math
@@ -2071,9 +2072,12 @@ class ExperimentLogger(Node):
                 self._gt_xy = (x, y)
                 self._gt_yaw = yaw
                 self._gt_stamp = stamp
-                writer = getattr(self, 'ground_truth_pose_writer', None)
-                if writer is not None:
-                    writer.writerow([repr(stamp), self._gt_stamp_source, repr(x), repr(y), repr(yaw)])
+                # Truth keeps arriving after the run ends; the file is closed by then.
+                with getattr(self, '_log_write_lock', None) or nullcontext():
+                    handle = getattr(self, 'ground_truth_pose_file', None)
+                    if handle is not None and not handle.closed:
+                        self.ground_truth_pose_writer.writerow(
+                            [repr(stamp), self._gt_stamp_source, repr(x), repr(y), repr(yaw)])
                 if math.isfinite(stamp) and (
                     not self._gt_buf or stamp > self._gt_buf[-1][0]
                 ):
