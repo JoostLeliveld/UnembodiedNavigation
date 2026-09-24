@@ -1717,7 +1717,7 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         f'command_noise_linear_additive_std:={cfg.get("command_noise_linear_additive_std", 0.008)}',
         f'command_noise_angular_additive_std:={cfg.get("command_noise_angular_additive_std", 0.035)}',
         f'command_noise_correlation_alpha:={cfg.get("command_noise_correlation_alpha", 0.85)}',
-        f'encoder_noise_linear_slip_mean:={cfg.get("encoder_noise_linear_slip_mean", 0.02)}',
+        f'encoder_noise_linear_slip_mean:={cfg.get("encoder_noise_linear_slip_mean", 0.0)}',
         f'encoder_noise_linear_slip_std:={cfg.get("encoder_noise_linear_slip_std", 0.05)}',
         f'encoder_noise_angular_slip_mean:={cfg.get("encoder_noise_angular_slip_mean", 0.0)}',
         f'encoder_noise_angular_slip_std:={cfg.get("encoder_noise_angular_slip_std", 0.03)}',

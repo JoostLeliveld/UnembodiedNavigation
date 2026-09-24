@@ -186,6 +186,8 @@ use_odom_for_predict: true
 odom_topic: /odom_noisy
 use_command_noise: true
 use_encoder_noise: true
+# Calibrated odometry: zero mean encoder scale error (METHOD amendment 2026-09-24 evening).
+encoder_noise_linear_slip_mean: 0.0
 process_noise_xy: 0.02
 process_noise_theta: 0.08
 r_visible_uv: 1.0

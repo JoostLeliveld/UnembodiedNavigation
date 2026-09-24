@@ -229,8 +229,9 @@ def generate_launch_description():
         DeclareLaunchArgument('stuck_idle_cmd_fraction_max', default_value='0.10'),
         DeclareLaunchArgument('use_command_noise', default_value='true'),
         DeclareLaunchArgument('use_encoder_noise', default_value='true'),
-        DeclareLaunchArgument('encoder_noise_linear_slip_mean', default_value='0.02',
-                              description='Mean multiplicative linear encoder slip used for /odom_noisy.'),
+        DeclareLaunchArgument('encoder_noise_linear_slip_mean', default_value='0.0',
+                              description='Mean multiplicative linear encoder slip used for /odom_noisy '
+                                          '(0: scale-calibrated odometry).'),
         DeclareLaunchArgument('encoder_noise_linear_slip_std', default_value='0.05',
                               description='Stddev of multiplicative linear encoder slip used for /odom_noisy.'),
         DeclareLaunchArgument('encoder_noise_angular_slip_mean', default_value='0.00',

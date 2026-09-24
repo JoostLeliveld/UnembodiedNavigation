@@ -591,3 +591,39 @@ Decided by the author after the first campaign, when the v8 data map was reviewe
 - **Reruns required.** The whole chain of amendment H, from detector inference to the
   campaign, analysis, figures and drop-ins. The v8 results are superseded, not reported
   as final; their analysis outputs are kept as evidence of the change.
+
+## Amendment 2026-09-24 (evening): calibrated odometry, Q evidence, belief bookkeeping
+
+Decided by the author after the offline replay of the v8 campaign.
+
+- **Encoder calibration (simulator, not estimator).** The simulated encoder no longer has a
+  mean scale error: `encoder_noise_linear_slip_mean` 0.02 -> 0.0, set explicitly in both
+  campaign templates. Real wheel odometry is scale-calibrated; no textbook odometry filter
+  models an uncalibrated bias. The random, AR(1)-correlated encoder slip and additive noise
+  stay, and so does the command (actuation) noise including its mean, which belongs to the
+  plant and which the encoders measure. Why: under white process noise the 2 % bias made the
+  along-track error exceed the predicted covariance after long camera gaps, and the NIS gate
+  then refused correct camera updates for several seconds (lockouts).
+- **Q unchanged, declared and conservative.** `process_noise_xy` 0.02 and
+  `process_noise_theta` 0.08 stay; Q is neither derived from the simulated noise nor
+  estimated. Evidence that it is conservative, reported with the results: starting from the
+  true pose with zero covariance and predicting on odometry alone, the true error lies inside
+  the 95 % ellipse in 0.98-0.99 of windows (position) and 1.00 (heading) at 1, 3 and 10 s,
+  with calibrated odometry. A Q computed from the declared encoder parameters alone
+  under-covers, so odometry error also arises outside the declared noise model; a "matched"
+  Q would have to be estimated on separate drives, which is not part of this method. Camera
+  covariance calibration is scored per observation against ground truth, where Q does not
+  enter; at belief level a larger Q softens rejections equally in every arm.
+- **Heading.** The heading follows odometry and camera updates act on position only
+  (`heading_update_mode: camera_xy_only`, as run). A coupled update is not used: without a
+  model of time-correlated camera errors it moves the heading on camera noise.
+- **Unchanged.** Camera rate 5 Hz, gate, NIS threshold, fusion, R0/R1/R2, planner,
+  follower, tasks, seeds, goal rule and collision definition.
+- **Implementation closures (no method change).** (1) The belief anchor is committed a fixed
+  lag (2 x the camera freshness limit) behind the clock, so the odometry replay no longer
+  grows with a camera gap; before, the planner fell behind its own odometry in long gaps and
+  its belief went invalid (7 of 90 v8 runs, all global or per-camera dropout failures).
+  (2) Lockstep also waits until the planner has handled each step's odometry. The EKF
+  equations are unchanged.
+- **Reruns required.** The campaign and everything downstream of it (analysis, figures,
+  drop-ins). Route solving uses no odometry noise and is unaffected.
