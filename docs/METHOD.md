@@ -664,3 +664,13 @@ Decided by the author, frozen before any v10 image is captured.
   fixed R2 constants, planner, follower, tasks, seeds, goal rule and collision definition.
 - **Reruns required.** The whole refit chain (the correction is retrained by `refit.sh`),
   the sealed audit, routes, campaign, analysis and every downstream figure and drop-in.
+- **Validation 1 result (2026-09-24, 23:35) and decision.** The 40-pose validation capture was
+  complete (200/200 rows). The geometric view classes were not reliable enough to select the
+  hard-view top-up: of 46 views planned as edge only 11 were edge views in the images, 26
+  showed no robot at all (in frame geometrically but fully hidden), and bottom-hidden recall
+  was 0.58 (n = 12). A revised rule (a view counts only if a point of the robot box is in
+  frame and in line of sight) reached edge precision 0.50 but lowered bottom-hidden recall to
+  0.30, so it was not adopted. Decision: capture the **lane grid only** now (2260 poses;
+  chosen from driveable space and existing coverage alone, independent of the view classes).
+  The hard-view top-up is redesigned from **measured** view classes (segmentation masks of the
+  existing captures) and frozen by a further dated note before it is captured.
