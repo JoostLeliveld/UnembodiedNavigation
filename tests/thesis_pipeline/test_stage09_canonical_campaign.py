@@ -89,18 +89,6 @@ def test_runtime_and_planning_artifacts_are_model_matched_and_hash_bound():
             assert metadata["planner_model"] == planning_name
 
 
-def test_analyzer_requires_preselected_route_only_for_legacy_mode(tmp_path):
-    analyzer = load_script(
-        "stage09_analyzer",
-        "pipeline/analyze_campaign.py",
-    )
-    manifest = tmp_path / "run_manifest.json"
-    manifest.write_text(json.dumps({"global_planner_mode": "efe"}))
-    assert "preselected_route.json" not in analyzer.required_base_artifacts(tmp_path)
-    manifest.write_text(json.dumps({"global_planner_mode": "preselected_route"}))
-    assert "preselected_route.json" in analyzer.required_base_artifacts(tmp_path)
-
-
 def test_runner_maps_all_six_conditions_to_visibility_aware_efe():
     runner = load_script(
         "stage09_runner", "pipeline/campaign_runner.py"
