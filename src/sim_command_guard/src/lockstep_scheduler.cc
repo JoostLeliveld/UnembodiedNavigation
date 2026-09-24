@@ -5,9 +5,11 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -46,6 +48,10 @@ public:
     startupDelayS_ = declare_parameter<double>("startup_delay_s", 2.0);
     maxControlSteps_ = declare_parameter<int>("max_control_steps", 0);
     commandQuietS_ = declare_parameter<double>("controller_quiet_s", 2.0);
+    // Hold each step until the planner has handled that step's odometry. Without it a
+    // planner that falls behind is not paused with the world, and its belief silently
+    // ages against the simulation clock.
+    waitForPlanner_ = declare_parameter<bool>("wait_for_planner", false);
     if (stepIterations_ <= 0 || cameraEveryControlSteps_ <= 0 || timeoutS_ <= 0.0)
       throw std::invalid_argument("lockstep scheduler parameters must be positive");
 
@@ -57,7 +63,19 @@ public:
       [this](const std_msgs::msg::String &message) { OnManager(message.data); });
     odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
       "/odom", rclcpp::QoS(100),
-      [this](const nav_msgs::msg::Odometry &) { ++odomCount_; cv_.notify_all(); });
+      [this](const nav_msgs::msg::Odometry &message) {
+        latestOdomNs_ = StampNs(message.header.stamp);
+        ++odomCount_;
+        cv_.notify_all();
+      });
+    plannerOdomSub_ = create_subscription<std_msgs::msg::Header>(
+      "/planner/odometry_processed", rclcpp::QoS(100),
+      [this](const std_msgs::msg::Header &message) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        plannerOdomNs_ = std::max(plannerOdomNs_, StampNs(message.stamp));
+        plannerSeen_ = true;
+        cv_.notify_all();
+      });
     // After the logger's terminal stop the detector and manager go quiescent by
     // design; perception barriers then only stall the clock that the logger's
     // rest verification needs, so from then on the scheduler steps on odometry.
@@ -86,6 +104,11 @@ public:
   }
 
 private:
+  static std::int64_t StampNs(const builtin_interfaces::msg::Time &stamp)
+  {
+    return static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
+  }
+
   void OnDetector(const std::string &json)
   {
     const auto status = JsonString(json, "status");
@@ -235,6 +258,14 @@ private:
       }
       ++controlStep;
       if (!WaitFor([this, odomBefore]() { return odomCount_ > odomBefore; }, "odometry")) return;
+      if (waitForPlanner_) {
+        const std::int64_t stepOdomNs = latestOdomNs_.load();
+        // Before the planner's first message there is no belief to age; waiting then
+        // would stall startup, when the planner is still loading.
+        if (!WaitFor([this, stepOdomNs]() {
+              return terminalRequested_ || !plannerSeen_ || plannerOdomNs_ >= stepOdomNs;
+            }, "planner odometry")) return;
+      }
       // While the controller is publishing, hold the step until it has answered the
       // new state; once it falls silent (no plan yet, plan finished) stop waiting.
       if (controllerActive) {
@@ -269,6 +300,10 @@ private:
   double startupDelayS_{2.0};
   int maxControlSteps_{0};
   double commandQuietS_{2.0};
+  bool waitForPlanner_{false};
+  bool plannerSeen_{false};
+  std::int64_t plannerOdomNs_{0};
+  std::atomic<std::int64_t> latestOdomNs_{0};
   ignition::transport::Node gzNode_;
   std::mutex mutex_;
   std::condition_variable cv_;
@@ -287,6 +322,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr detectorSub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr managerSub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
+  rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr plannerOdomSub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr commandSub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr terminalSub_;
 };

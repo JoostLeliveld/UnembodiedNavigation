@@ -241,7 +241,6 @@ class ExperimentLogger(Node):
         self.declare_parameter('control_weight', 0.0)
         self.declare_parameter('process_noise_xy', 0.012)
         self.declare_parameter('process_noise_theta', 0.05)
-        self.declare_parameter('obs_noise_uv', 2.0)
         self.declare_parameter('goal_prior_u_std_start', 80.0)
         self.declare_parameter('goal_prior_v_std_start', 80.0)
         self.declare_parameter('goal_prior_u_std_final', 18.0)
@@ -506,7 +505,6 @@ class ExperimentLogger(Node):
         self.control_weight = float(self.get_parameter('control_weight').value)
         self.process_noise_xy = float(self.get_parameter('process_noise_xy').value)
         self.process_noise_theta = float(self.get_parameter('process_noise_theta').value)
-        self.obs_noise_uv = float(self.get_parameter('obs_noise_uv').value)
         self.goal_prior_u_std_start = float(self.get_parameter('goal_prior_u_std_start').value)
         self.goal_prior_v_std_start = float(self.get_parameter('goal_prior_v_std_start').value)
         self.goal_prior_u_std_final = float(self.get_parameter('goal_prior_u_std_final').value)
@@ -946,7 +944,6 @@ class ExperimentLogger(Node):
             'control_weight': self.control_weight,
             'process_noise_xy': self.process_noise_xy,
             'process_noise_theta': self.process_noise_theta,
-            'obs_noise_uv': self.obs_noise_uv,
             'optimizer_maxiter': self.optimizer_maxiter,
             'optimizer_maxfun': self.optimizer_maxfun,
             'optimizer_ftol': self.optimizer_ftol,

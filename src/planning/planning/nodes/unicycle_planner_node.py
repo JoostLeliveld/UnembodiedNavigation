@@ -16,7 +16,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
-from std_msgs.msg import Float64MultiArray, String
+from std_msgs.msg import Float64MultiArray, Header, String
 from builtin_interfaces.msg import Time as TimeMsg
 
 from perception.core.detection_diagnostics import (
@@ -125,7 +125,6 @@ class UnicyclePlannerNode(Node):
         _declare_if_not('process_noise_theta', 0.08)
         # Frozen process-model option. Campaign manifests must state its value.
         _declare_if_not('coherent_drift', False)
-        _declare_if_not('obs_noise_uv', 2.0)
 
         # Goal observation covariance
         _declare_if_not('goal_sigma_uv', 2.0)
@@ -395,7 +394,6 @@ class UnicyclePlannerNode(Node):
         self.coherent_drift = bool(self.get_parameter('coherent_drift').value)
         self.process_noise_xy = float(self.get_parameter('process_noise_xy').value)
         self.process_noise_theta = float(self.get_parameter('process_noise_theta').value)
-        self.obs_noise_uv = float(self.get_parameter('obs_noise_uv').value)
 
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
 
@@ -805,6 +803,7 @@ class UnicyclePlannerNode(Node):
             PoseWithCovarianceStamped, '/planner_belief', qos_profile=path_qos
         )
         self.belief_state_pub = self.create_publisher(String, '/planner/belief_state', qos_profile=path_qos)
+        self.odometry_processed_pub = self.create_publisher(Header, '/planner/odometry_processed', 100)
         self.metrics_pub = self.create_publisher(Float64MultiArray, '/efe/metrics', 10)
         self.planner_diag_pub = self.create_publisher(Float64MultiArray, '/planner/diagnostics', 10)
         self.planner_diag_text_pub = self.create_publisher(String, '/planner/diagnostics_text', 10)
@@ -1325,7 +1324,7 @@ class UnicyclePlannerNode(Node):
             dt=float(g_default('dt', self.dt)), v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
             control_weight=self.control_weight,
             process_noise_xy=self.process_noise_xy, process_noise_theta=self.process_noise_theta,
-            obs_noise_uv=self.obs_noise_uv, goal_sigma_uv=self.goal_sigma_uv,
+            goal_sigma_uv=self.goal_sigma_uv,
             risk_weight_obs=self.risk_weight_obs, ambiguity_weight=self.ambiguity_weight,
             optimizer_maxiter=int(g('optimizer_maxiter')), optimizer_maxfun=int(g('optimizer_maxfun')),
             optimizer_ftol=float(g('optimizer_ftol')), optimizer_gtol=float(g('optimizer_gtol')),
@@ -1538,6 +1537,24 @@ class UnicyclePlannerNode(Node):
                 self._odom_buffered_future = getattr(
                     self, '_odom_buffered_future', 0) + 1
             self._flush_pending_odom_locked(now_ns)
+        # Received counts as processed: a buffered sample is committed as soon as
+        # /clock reaches it, with no further work in this node.
+        self._publish_odometry_processed(stamp_ns)
+
+    def _publish_odometry_processed(self, stamp_ns) -> None:
+        """Tell the lockstep scheduler which odometry stamp this node's callback has handled.
+
+        The scheduler holds the next simulation step until this stamp reaches the
+        step's odometry, so a slow planner pauses the simulation instead of falling
+        behind simulated time.
+        """
+        publisher = getattr(self, 'odometry_processed_pub', None)
+        if publisher is None or stamp_ns is None:
+            return
+        msg = Header()
+        msg.stamp = self._ns_stamp(int(stamp_ns))
+        msg.frame_id = 'odom'
+        publisher.publish(msg)
 
     def _flush_pending_odom_locked(self, now_ns: int) -> None:
         """Move only causally available odometry into the replay history.
@@ -2943,7 +2960,39 @@ class UnicyclePlannerNode(Node):
             path.poses.append(goal_pose)
         return path
 
+    # Minimum step of an anchor advance, so the revision does not churn at the tick rate.
+    _ANCHOR_ADVANCE_MIN_STEP_S = 0.5
+
+    def _advance_belief_anchor(self):
+        """Commit the odometry prediction as the anchor, a fixed lag behind the clock.
+
+        Every belief query replays odometry from the anchor to now. With an anchor that
+        moves only on camera corrections, that replay, and the lock it holds, grows with
+        the camera gap until the node falls behind its own odometry. The anchor is
+        therefore advanced to ``now - 2 * pixel_timeout_s``. Corrections older than
+        ``pixel_timeout_s`` are refused, so every admissible correction, including one
+        whose processing started up to ``pixel_timeout_s`` before this advance, still
+        lies after the anchor. An interval without odometry support is not committed:
+        it stays visible to every query as unsupported motion.
+        """
+        with self._data_lock:
+            now_ns = self._observe_belief_clock_locked()
+            record = self._belief_record
+            if now_ns is None or record is None or record.epoch != self._belief_epoch:
+                return
+            target_ns = now_ns - round(2.0 * float(self.pixel_timeout_s) * 1e9)
+            if target_ns - record.stamp_ns < round(self._ANCHOR_ADVANCE_MIN_STEP_S * 1e9):
+                return
+            plan = plan_replay(self._motion_snapshot_locked(), record.stamp_ns, target_ns,
+                               self.state_max_predict_dt_s)
+            support = plan.support.following(record.motion_support)
+            if not support.supported:
+                return
+            m, P, _, _ = self._run_motion_replay(*record.arrays(), plan)
+            self._commit_belief(m, P, self._ns_stamp(target_ns), motion_support=support)
+
     def _belief_publish_tick(self):
+        self._advance_belief_anchor()
         with self._data_lock:
             now_ns = self._observe_belief_clock_locked()
             record = self._belief_record

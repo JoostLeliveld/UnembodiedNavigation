@@ -343,7 +343,7 @@ def test_repeated_camera_opportunities_contract_covariance_and_validate_count(tm
 def make_planner(path, **overrides):
     from planning.planners.base_planner import UnicyclePlannerBase
     settings=dict(horizon=5,dt=.25,v_min=0.,v_max=.5,w_min=-1.,w_max=1.,
-        control_weight=.02,process_noise_xy=.01,process_noise_theta=.02,obs_noise_uv=2.5,
+        control_weight=.02,process_noise_xy=.01,process_noise_theta=.02,
         goal_sigma_uv=30.,risk_weight_obs=1.,ambiguity_weight=1.,optimizer_maxiter=15,
         optimizer_gtol=1e-5,optimizer_warm_start=False,seed=513,use_visibility_model=True,
         camera_network_artifact_path=str(path),camera_params=dict(cam_pos=(-5.,-5.,5.),

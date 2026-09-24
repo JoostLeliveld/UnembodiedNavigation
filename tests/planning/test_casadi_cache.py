@@ -11,7 +11,7 @@ from planning.planners.base_planner import UnicyclePlannerBase
 def planner(**overrides):
     settings = dict(horizon=6, dt=.25, v_min=0., v_max=.22, w_min=-.8, w_max=.8,
                     control_weight=.02, process_noise_xy=.01, process_noise_theta=.02,
-                    obs_noise_uv=2.5, goal_sigma_uv=30., risk_weight_obs=1., ambiguity_weight=1.,
+                    goal_sigma_uv=30., risk_weight_obs=1., ambiguity_weight=1.,
                     optimizer_maxiter=10, optimizer_gtol=1e-5, optimizer_warm_start=False, seed=5,
                     camera_params=dict(cam_pos=[-5., -5.5, 4.8], look_at=[1.5, 1.5, 0.],
                                        img_width=1280, img_height=720, fov_h_rad=1.2))

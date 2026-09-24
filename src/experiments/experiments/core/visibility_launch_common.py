@@ -130,7 +130,6 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # docs/PROCESS_NOISE.md.
     'process_noise_xy': '0.02',
     'process_noise_theta': '0.08',
-    'obs_noise_uv': '2.0',
     'optimizer_maxiter': '80',
     'optimizer_maxfun': '500',
     'optimizer_ftol': '1e-6',
@@ -587,7 +586,6 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'stuck_idle_cmd_fraction_max': float(_launch_value(context, 'stuck_idle_cmd_fraction_max', PAPER_LAUNCH_DEFAULTS['stuck_idle_cmd_fraction_max'])),
         'process_noise_xy': float(_launch_value(context, 'process_noise_xy', PAPER_LAUNCH_DEFAULTS['process_noise_xy'])),
         'process_noise_theta': float(_launch_value(context, 'process_noise_theta', PAPER_LAUNCH_DEFAULTS['process_noise_theta'])),
-        'obs_noise_uv': float(_launch_value(context, 'obs_noise_uv', PAPER_LAUNCH_DEFAULTS['obs_noise_uv'])),
         'optimizer_maxiter': int(_launch_value(context, 'optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['optimizer_maxiter'])),
         'optimizer_maxfun': int(_launch_value(context, 'optimizer_maxfun', PAPER_LAUNCH_DEFAULTS['optimizer_maxfun'])),
         'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
@@ -1723,7 +1721,6 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'control_weight': cfg['control_weight'],
                 'process_noise_xy': cfg['process_noise_xy'],
                 'process_noise_theta': cfg['process_noise_theta'],
-                'obs_noise_uv': cfg['obs_noise_uv'],
                 'optimizer_maxiter': cfg['optimizer_maxiter'],
                 'optimizer_maxfun': cfg['optimizer_maxfun'],
                 'optimizer_ftol': cfg['optimizer_ftol'],
@@ -1865,6 +1862,8 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'control_step_iterations': cfg['lockstep_control_step_iterations'],
                 'camera_every_control_steps': cfg['lockstep_camera_every_control_steps'],
                 'max_control_steps': cfg['lockstep_max_control_steps'],
+                # A planner that falls behind pauses the world instead of ageing.
+                'wait_for_planner': True,
                 # GPU model load and warm-up can exceed 30 s on this laptop. This
                 # timeout also catches genuinely wedged runtime barriers once active.
                 'barrier_timeout_s': 180.0,
@@ -2365,7 +2364,6 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'debug_runtime': cfg['debug_runtime'],
             'process_noise_xy': cfg['process_noise_xy'],
             'process_noise_theta': cfg['process_noise_theta'],
-            'obs_noise_uv': cfg['obs_noise_uv'],
             'goal_sigma_uv': cfg['goal_sigma_uv'],
             'risk_weight_obs': cfg['risk_weight_obs'],
             'ambiguity_weight': cfg['ambiguity_weight'],
