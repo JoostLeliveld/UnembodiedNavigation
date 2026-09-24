@@ -1001,6 +1001,13 @@ class EfeAgentNode(UnicyclePlannerNode):
                 # point 0 checks the live current-pose connector; point 1 also
                 # checks the actual initial turn and first frozen route leg.
                 points_to_check = points[:2]
+                # A route start already within the follower's arrival radius is
+                # reached on the first tick: the follower never turns to face it.
+                # Checking that turn (toward a few-centimetre offset, so toward an
+                # arbitrary heading) rejected every run from a start in a narrow aisle.
+                arrival = float(getattr(self, 'waypoint_arrival_radius_m', 0.0))
+                if np.linalg.norm(points[0] - np.asarray(current_m[:2], dtype=float)) <= arrival:
+                    points_to_check = points[1:2]
             pose = np.asarray(current_m[:3], dtype=float).copy()
             for point in points_to_check:
                 delta = point - pose[:2]
