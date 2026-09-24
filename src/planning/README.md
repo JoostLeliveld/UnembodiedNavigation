@@ -16,4 +16,4 @@ Primary files:
 - `planning/core/dynamics.py`: frozen unicycle process model;
 - `planning/core/visibility_gp_map.py`: planner-facing commissioned field adapter.
 
-Final run comparisons must follow `docs/localization_metrics.md` and its registry.
+Final run comparisons must follow the reporting rules in `docs/METHOD.md` §11.

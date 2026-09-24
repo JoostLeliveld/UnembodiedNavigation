@@ -15,9 +15,8 @@ Read these sources in order:
 
 1. `docs/METHOD.md` — authoritative method, including its latest amendment.
 2. `docs/STATE.md` — where the data and results are, current state, open items, history.
-3. `pipeline/dataset_lock.json` and, once created, the campaign manifest — the exact inputs
+3. `pipeline/dataset_lock.json` and `logs/thesis/campaign/manifest.json` — the exact inputs
    by path and hash.
-4. `docs/localization_metrics.md` and `docs/localization_metrics_registry.json` — admissible results.
 
 ## Where things live
 
@@ -102,7 +101,7 @@ hash. All other results, plots, protocols, and run summaries are non-authoritati
 an arbitrary `RESULTS.md`, a glob of run directories, or a value remembered from another chat.
 
 For camera accuracy, localization error, belief error, RMSE, bias, NEES, coverage, or run
-comparisons, also follow `docs/localization_metrics.md` and its registry. State the layer,
+comparisons, also follow the reporting rules in `docs/METHOD.md` §11. State the layer,
 statistic, reference, run set, and sample unit. Score readings, fused corrections, and beliefs
 at their own timestamps. Use the declared independent unit: complete drive for older drive-
 based development evidence, complete static position for the final reference survey, and

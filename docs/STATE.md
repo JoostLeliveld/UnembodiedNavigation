@@ -80,8 +80,8 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
    `pipeline/dataset.py`; maps draw the collision scene from the SDF (the zones omit the
    five loose objects).
 7. After the campaign: remove the legacy planner objective and visibility-GP chain, the
-   sensor-model v1 reader and the aws/full_4cam worlds (see memory note), `pipeline_lock.json`,
-   the v5 lock and its auditor.
+   sensor-model v1 reader and the aws/full_4cam worlds (see memory note). (`pipeline_lock.json`,
+   the v5 lock chain and the old alignment loader were removed in deletion round 2.)
 8. Manuscript (TeX only with explicit approval): Table I's spatial row is the old
    shrink-to-R1 R2; capture statistics were inflated by the broken frames; every number
    must be regenerated from v8; `papers/Thesis/TODO.md` still describes the rejected v7 plan.
