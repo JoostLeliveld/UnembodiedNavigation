@@ -182,7 +182,11 @@ private:
     }
     const std::int64_t cameraPeriodNs =
       static_cast<std::int64_t>(stepIterations_) * cameraEveryControlSteps_ * 1000000LL;
-    const std::int64_t alignedNs = ((pausedNs + cameraPeriodNs - 1) / cameraPeriodNs) * cameraPeriodNs;
+    std::int64_t alignedNs = ((pausedNs + cameraPeriodNs - 1) / cameraPeriodNs) * cameraPeriodNs;
+    // A shorter step than one control step may produce no odometry message and would
+    // wedge the odometry barrier (campaign: 3 of 90 runs); go one camera period further.
+    if (alignedNs - pausedNs < static_cast<std::int64_t>(stepIterations_) * 1000000LL)
+      alignedNs += cameraPeriodNs;
     const std::uint64_t alignIterations =
       static_cast<std::uint64_t>((alignedNs - pausedNs + 500000LL) / 1000000LL);
     std::optional<std::string> pendingManagerBatch;
