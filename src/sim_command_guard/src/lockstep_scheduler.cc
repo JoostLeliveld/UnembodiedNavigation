@@ -45,6 +45,7 @@ public:
     timeoutS_ = declare_parameter<double>("barrier_timeout_s", 30.0);
     startupDelayS_ = declare_parameter<double>("startup_delay_s", 2.0);
     maxControlSteps_ = declare_parameter<int>("max_control_steps", 0);
+    commandQuietS_ = declare_parameter<double>("controller_quiet_s", 2.0);
     if (stepIterations_ <= 0 || cameraEveryControlSteps_ <= 0 || timeoutS_ <= 0.0)
       throw std::invalid_argument("lockstep scheduler parameters must be positive");
 
@@ -127,6 +128,16 @@ private:
     return true;
   }
 
+  // A bounded wait that is not an error: the controller publishes only while it
+  // holds an active plan, so its silence is a state, not a wedged barrier.
+  template<typename Predicate>
+  bool WaitForQuietly(Predicate predicate, double timeoutS)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return cv_.wait_for(lock, std::chrono::duration<double>(timeoutS),
+      [this, &predicate]() { return stopping_ || predicate(); }) && !stopping_;
+  }
+
   bool Control(const ignition::msgs::WorldControl &request)
   {
     ignition::msgs::Boolean response;
@@ -187,6 +198,7 @@ private:
 
     const auto wallStart = std::chrono::steady_clock::now();
     std::uint64_t controlStep = 0;
+    bool controllerActive = false;
     while (rclcpp::ok() && !stopping_ &&
            (maxControlSteps_ <= 0 || controlStep < static_cast<std::uint64_t>(maxControlSteps_))) {
       if (pendingManagerBatch) {
@@ -208,8 +220,15 @@ private:
       }
       ++controlStep;
       if (!WaitFor([this, odomBefore]() { return odomCount_ > odomBefore; }, "odometry")) return;
-      if (commandBefore > 0 &&
-          !WaitFor([this, commandBefore]() { return commandCount_ > commandBefore; }, "controller command")) return;
+      // While the controller is publishing, hold the step until it has answered the
+      // new state; once it falls silent (no plan yet, plan finished) stop waiting.
+      if (controllerActive) {
+        controllerActive = WaitForQuietly(
+          [this, commandBefore]() { return commandCount_ > commandBefore; }, commandQuietS_);
+        if (stopping_) return;
+      } else {
+        controllerActive = commandCount_ > commandBefore;
+      }
 
       if (controlStep % static_cast<std::uint64_t>(cameraEveryControlSteps_) == 0) {
         if (!WaitFor([this, detectorBefore]() {
@@ -234,6 +253,7 @@ private:
   double timeoutS_{30.0};
   double startupDelayS_{2.0};
   int maxControlSteps_{0};
+  double commandQuietS_{2.0};
   ignition::transport::Node gzNode_;
   std::mutex mutex_;
   std::condition_variable cv_;
