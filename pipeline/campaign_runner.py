@@ -1480,7 +1480,6 @@ def _existing_entry_matches_config(
         'manager_fusion_mode', 'manager_require_gp_artifacts',
         'manager_use_task_start_as_bootstrap_prior',
         'manager_bootstrap_prior_counts_as_support',
-        'initial_belief_from_task_start',
     )
     for key in bool_keys:
         expected = expected_value(key)

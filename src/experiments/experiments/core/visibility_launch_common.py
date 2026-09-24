@@ -1930,7 +1930,7 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_use_task_start_as_bootstrap_prior', False)),
         'manager_bootstrap_prior_counts_as_support': _as_bool(
             cfg.get('manager_bootstrap_prior_counts_as_support', False)),
-        'assume_initial_belief_anchor': _as_bool(cfg.get('initial_belief_from_task_start', False)),
+        'manager_assume_initial_belief_anchor': _as_bool(cfg.get('initial_belief_from_task_start', False)),
         'manager_fusion_max_timestamp_spread_s': float(
             cfg.get('manager_fusion_max_timestamp_spread_s', 0.05)),
         'manager_covariance_profile': str(
