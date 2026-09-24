@@ -53,7 +53,7 @@ def covariance_table(report):
 
 
 def fusion_table(fusion):
-    order = (("best_spatial_single", "$R_2$-selected single"), ("equal", "Equal weights"),
+    order = (("closest_single", "Closest camera"), ("best_spatial_single", "$R_2$-selected single"), ("equal", "Equal weights"),
              ("rproj", "Geometric"), ("global", "Global"), ("per_camera", "Per-camera"), ("spatial", "Spatial"))
     m = fusion["metrics"]
     rmse = [m[k]["rmse_m"] for k, _ in order]

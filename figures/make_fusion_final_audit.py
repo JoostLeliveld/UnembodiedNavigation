@@ -15,8 +15,8 @@ import json
 
 import paper as P
 
-RULES = ("best_spatial_single", "equal", "rproj", "global", "per_camera", "spatial")
-STYLE = {"best_spatial_single": ("s", (0, (1, 1.2))), "equal": ("D", (0, (1, 1.2))),
+RULES = ("closest_single", "best_spatial_single", "equal", "rproj", "global", "per_camera", "spatial")
+STYLE = {"closest_single": ("v", (0, (1, 1.2))), "best_spatial_single": ("s", (0, (1, 1.2))), "equal": ("D", (0, (1, 1.2))),
          "rproj": ("o", (0, (3, 1.5))), "global": ("o", "-"), "per_camera": ("o", "-"), "spatial": ("o", "-")}
 
 
@@ -29,7 +29,7 @@ def main():
     for rule in RULES:
         marker, ls = STYLE[rule]
         y = [100 * report["by_camera_count"][rule][str(c)]["rmse_m"] for c in counts]
-        hollow = rule in ("rproj", "equal", "best_spatial_single")
+        hollow = rule in ("rproj", "equal", "best_spatial_single", "closest_single")
         ax.plot(counts, y, ls=ls, marker=marker, ms=3.5, color=P.MODEL_COLOUR[rule],
                 mfc="white" if hollow else P.MODEL_COLOUR[rule], mew=0.9, lw=1.1, label=P.MODEL_LABEL[rule])
     ax.set_xticks(counts)

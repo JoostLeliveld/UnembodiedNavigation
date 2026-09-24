@@ -148,17 +148,17 @@ def main() -> int:
     source = [json.loads(line) for line in records_path.read_text(
         encoding="utf-8").splitlines()]
     admitted = [row for row in source if row["outcome"] == "admitted"]
+    world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
+    cameras = {}
+    for row in by_hash.values():
+        if row["camera_id"] not in cameras:
+            cameras[row["camera_id"]] = camera_model_from_world(
+                world, include_name=row["camera_model"])
     rproj_sigma_px = None
     fused_rules = tuple(MODEL_PATHS)
     if args.rproj_ddev is not None:
         rproj_sigma_px = float(json.loads(args.rproj_ddev.read_text(encoding="utf-8"))[
             "Rproj"]["sigma_px"])
-        world = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
-        cameras = {}
-        for row in by_hash.values():
-            if row["camera_id"] not in cameras:
-                cameras[row["camera_id"]] = camera_model_from_world(
-                    world, include_name=row["camera_model"])
         fused_rules = fused_rules + ("rproj",)
 
     evaluated = []
@@ -231,6 +231,15 @@ def main() -> int:
         errors["best_spatial_single"].append(best_error)
         by_count["best_spatial_single"][count].append(best_error)
 
+        # Naive single-camera rule: the camera mounted nearest to its own corrected
+        # estimate. Uses no covariance model and no ground truth.
+        closest = min(items, key=lambda item: np.linalg.norm(
+            np.asarray(item["corrected_xy_m"], dtype=float)
+            - cameras[item["camera_id"]].cam_pos[:2]))
+        errors["closest_single"].append(float(np.linalg.norm(
+            np.asarray(closest["corrected_xy_m"], dtype=float) - truth)))
+        by_count["closest_single"][count].append(errors["closest_single"][-1])
+
         for name in fused_rules:
             estimate, covariance = fuse(items, name)
             residual = estimate - truth
@@ -243,6 +252,7 @@ def main() -> int:
 
     metrics = {
         "best_spatial_single": summary(errors["best_spatial_single"]),
+        "closest_single": summary(errors["closest_single"]),
         "equal": summary(errors["equal"]),
         **{name: summary(errors[name], nis[name], areas[name]) for name in fused_rules},
     }
@@ -251,6 +261,8 @@ def main() -> int:
         spatial_wins / len(batches))
     metrics["spatial"]["rmse_reduction_vs_equal"] = (
         1.0 - metrics["spatial"]["rmse_m"] / metrics["equal"]["rmse_m"])
+    metrics["spatial"]["rmse_reduction_vs_closest_single"] = (
+        1.0 - metrics["spatial"]["rmse_m"] / metrics["closest_single"]["rmse_m"])
     metrics["spatial"]["rmse_reduction_vs_best_spatial_single"] = (
         1.0 - metrics["spatial"]["rmse_m"]
         / metrics["best_spatial_single"]["rmse_m"])
@@ -271,6 +283,7 @@ def main() -> int:
         "inclusion": "at least two admitted cameras in the sealed final audit",
         "fusion_rule": "independent information-form fusion",
         "best_single_rule": "admitted camera with smallest spatial-model covariance determinant",
+        "closest_single_rule": "admitted camera mounted nearest (ground plane) to its own corrected estimate",
         "batches": len(batches),
         "admitted_observations": len(admitted),
         "metrics": metrics,

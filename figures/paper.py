@@ -38,9 +38,11 @@ COLUMN, TEXT = 3.5, 7.16          # IEEE column and text width (inches)
 MODELS = ("global", "per_camera", "spatial")
 MODEL_KEY = {"global": "m0", "per_camera": "m1", "spatial": "m2"}
 MODEL_LABEL = {"global": "Global", "per_camera": "Per-camera", "spatial": "Spatial",
-               "rproj": "Geometric", "equal": "Equal weights", "best_spatial_single": "Best single"}
+               "rproj": "Geometric", "equal": "Equal weights", "best_spatial_single": "Best single",
+               "closest_single": "Closest camera"}
 MODEL_COLOUR = {"global": "#0072B2", "per_camera": "#E69F00", "spatial": "#009E73",
-                "rproj": "#7f7f7f", "equal": "#b0b0b0", "best_spatial_single": "#595959"}
+                "rproj": "#7f7f7f", "equal": "#b0b0b0", "best_spatial_single": "#595959",
+                "closest_single": "#CC79A7"}
 COLLISION, STUCK, SHORT = "#D55E00", "#CC79A7", "#a6a6a6"
 INK, MUTED, RACK, RACK_EDGE = "#1a1a1a", "#6b6b6b", "#e4e2dc", "#bdbab2"
 from matplotlib.colors import ListedColormap  # noqa: E402
