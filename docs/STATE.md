@@ -27,7 +27,17 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
 - **Final audit**: opened once, 2026-09-24 01:30 (`logs/thesis/final_audit/report.json`,
   `final_audit_fusion/report.json`; protocol `logs/thesis/final_audit_protocol.json`).
   150 positions, 3,000 opportunities, 1,633 admitted. Quote numbers from the reports.
-- **Routes, campaign**: in progress.
+- **Routes**: 30 solved and checked. **Campaign**: running since 2026-09-24 03:01 (manifest
+  `logs/thesis/campaign/manifest.json`, driver log in `pipeline.log`).
+- **Goal rule changed before the campaign** (agent, overnight): the template stopped at
+  0.30 m on the belief, the same radius the success score uses, against the author's rerun
+  decision of 2026-09-22. Now stop 0.10 m (belief), success < 0.30 m (ground truth), 90 s
+  limit, `goal_loiter_timeout` terminator (METHOD amendment D). Five runs made with the old
+  rule are in `logs/thesis/superseded_goal_radius_0p30/` and are not results.
+- **Qualification with the new rule**: task C spatial_intact reached the goal (4.5 cm true);
+  task E-long spatial_intact clipped an obstacle at the corner of its northern crossing
+  (footprint 5 mm inside, then stuck) where the ideal replay had 5.2 cm clearance: a real
+  outcome of belief error and actuation noise, not an infrastructure failure.
 - **Repo**: lean layout, one version of every artifact, tests green; tag
   `pre-lean-20260924` holds everything removed during the lean-up.
 
