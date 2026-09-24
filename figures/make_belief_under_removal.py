@@ -4,7 +4,7 @@ per-camera models keep; the spatial model's route keeps them.
 
 One point per run (5 tasks x 3 seeds per arm), after the first command: (a) the peak of the
 belief's own one-sigma (major axis), (b) the peak of its true error against ground truth.
-Filled: the run succeeded; x: it failed (collision, stuck or short). The horizontal bar is
+Filled: the run succeeded; x: it failed. The horizontal bar is
 the arm median.
 
     python3 figures/make_belief_under_removal.py
@@ -61,7 +61,7 @@ def main():
         ax.set_yticks([0.03, 0.1, 0.3, 1, 3]); ax.set_yticklabels(["0.03", "0.1", "0.3", "1", "3"])
         ax.minorticks_off()
         ax.set_xticks([k * 2.6 + s for k in range(3) for s in (0, 1)])
-        ax.set_xticklabels(["all", "rem."] * 3, fontsize=6.3)
+        ax.set_xticklabels(["all", "drop."] * 3, fontsize=6.3)
         for k, model in enumerate(P.MODELS):
             ax.text(k * 2.6 + 0.5, -0.2, P.MODEL_LABEL[model], transform=ax.get_xaxis_transform(), ha="center",
                     va="top", fontsize=6.5, color=P.MODEL_COLOUR[model], fontweight="bold")

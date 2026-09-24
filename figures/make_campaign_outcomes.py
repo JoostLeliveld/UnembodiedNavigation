@@ -2,9 +2,9 @@
 """Every campaign run at a glance, and what removing the task camera cost each model.
 
 (a) One square per run: rows are tasks, column groups are models, and within a group the
-    three seeds with all cameras (left) and with the task camera removed (right). Filled in
+    three seeds with all cameras (left) and under dropout of the task camera (right). Filled in
     the model colour: success. Failures are empty cells with a glyph: x the footprint left
-    the driveable region, o stuck, - stopped but outside the 0.30 m success radius.
+    the driveable region, o the run failed without leaving it.
 (b) Removal minus intact, matched on (task, seed): success rate, mean belief error and mean
     belief one-sigma, with 95 % bootstrap intervals from logs/thesis/analysis/summary.json.
 
@@ -29,9 +29,7 @@ def cell_style(r):
         return P.MODEL_COLOUR[r["model"]], None
     if r["collision"] == "1":
         return "white", ("x", P.COLLISION)
-    if r["outcome"] == "stuck":
-        return "white", ("o", P.STUCK)
-    return "white", ("_", P.MUTED)
+    return "white", ("o", P.STUCK)
 
 
 def main():
@@ -64,7 +62,7 @@ def main():
         removed = next(t["removed"] for t in P.tasks() if t["name"] == task)
         ga.text(width + 0.25, y + s / 2, removed[-1], ha="left", va="center", fontsize=7, color=P.MUTED)
     top = len(tasks) * (s + 0.45)
-    ga.text(width + 0.25, top - 0.2, "removed", ha="left", va="bottom", fontsize=6.5, color=P.MUTED)
+    ga.text(width + 0.25, top - 0.2, "dropped", ha="left", va="bottom", fontsize=6.5, color=P.MUTED)
     for model in P.MODELS:
         xa, xb = x0[(model, "intact")], x0[(model, "removal")] + 3 * s + 2 * gap_seed
         ga.text((xa + xb) / 2, top + 1.05, P.MODEL_LABEL[model], ha="center", va="bottom",
@@ -72,15 +70,14 @@ def main():
         for state in ("intact", "removal"):
             xs = x0[(model, state)]
             n = sum(r["success"] == "1" for r in rows if r["model"] == model and r["state"] == state)
-            ga.text(xs + 1.5 * s + gap_seed, top - 0.2, f"{'all' if state == 'intact' else 'removed'}\n{n}/15",
+            ga.text(xs + 1.5 * s + gap_seed, top - 0.2, f"{'all' if state == 'intact' else 'dropout'}\n{n}/15",
                     ha="center", va="bottom", fontsize=6.5, linespacing=1.0)
     ga.set_xlim(-0.2, width + 1.4); ga.set_ylim(-0.2, top + 1.75)
     ga.set_aspect("equal"); ga.axis("off")
     handles = [Line2D([], [], marker="s", ls="none", ms=6, mfc=P.MODEL_COLOUR["spatial"], mec="none"),
                Line2D([], [], marker="x", ls="none", ms=5, color=P.COLLISION, mew=1.3),
-               Line2D([], [], marker="o", ls="none", ms=5, mfc="none", mec=P.STUCK, mew=1.3),
-               Line2D([], [], marker="_", ls="none", ms=6, color=P.MUTED, mew=1.3)]
-    ga.legend(handles, ["success (model colour)", "left driveable region", "stuck", "stopped > 0.30 m"],
+               Line2D([], [], marker="o", ls="none", ms=5, mfc="none", mec=P.STUCK, mew=1.3)]
+    ga.legend(handles, ["success (model colour)", "failed, left the driveable region", "failed, stayed inside"],
               loc="upper center", bbox_to_anchor=(0.52, 0.0), ncol=4, fontsize=6.3, handlelength=0.9,
               columnspacing=0.8, handletextpad=0.35)
     ga.text(-0.02, 0.97, "(a)", transform=ga.transAxes, fontweight="bold")
@@ -102,7 +99,7 @@ def main():
         ax.set_ylim(-0.6, 2.6); ax.set_yticks([])
         ax.spines["left"].set_visible(False)
         ax.set_title(label, pad=3)
-        ax.set_xlabel(f"removed $-$ all ({unit})", fontsize=6.8, labelpad=1)
+        ax.set_xlabel(f"dropout $-$ all ({unit})", fontsize=6.8, labelpad=1)
         ax.tick_params(axis="x", labelsize=6.5)
         if k == 0:
             for j, model in enumerate(P.MODELS):

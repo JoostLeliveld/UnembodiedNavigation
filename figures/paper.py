@@ -11,7 +11,7 @@ collision score uses, so a map never shows free space the robot does not have.
 | green `#009E73` | spatial model (R2 / M2) |
 | grey | geometric projection baseline (R_proj) and other baselines |
 | vermillion `#D55E00` | a collision (footprint left the driveable region) |
-| reddish purple `#CC79A7` | stuck: the run ended short of the goal |
+| reddish purple `#CC79A7` | a failed run that stayed inside the driveable region |
 
 Figures are written to `logs/thesis/figures/` (PDF for the manuscript, PNG for review).
 """
