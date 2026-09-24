@@ -263,6 +263,13 @@ class UnicyclePlannerNode(Node):
         # uses: motion-replay latency compensation to the correction stamp, a
         # covariance-weighted Kalman update, NIS + jump gating.
         _declare_if_not('state_correction_ekf', False)
+        # A declared task-start prior lets the filter and planner start without
+        # waiting for a camera batch.  It is a configuration input, not a
+        # simulator pose subscription: campaigns must record the values.
+        _declare_if_not('initial_belief_from_task_start', False)
+        _declare_if_not('initial_belief_xyyaw', [0.0, 0.0, 0.0])
+        _declare_if_not('initial_belief_xy_std_m', 0.10)
+        _declare_if_not('initial_belief_yaw_std_rad', math.radians(15.0))
         # How the multicam measurements reach the filter.
         #   'fused'      -- one pre-fused /state/bev pose per tick (camera_manager
         #                   fuses in map space, then the planner does one update).
@@ -563,6 +570,25 @@ class UnicyclePlannerNode(Node):
 
         self.use_pixel_correction = _as_bool(self.get_parameter('use_pixel_correction').value)
         self.state_correction_ekf = _as_bool(self.get_parameter('state_correction_ekf').value)
+        self.initial_belief_from_task_start = _as_bool(
+            self.get_parameter('initial_belief_from_task_start').value
+        )
+        initial_xyyaw = tuple(float(value) for value in
+                              self.get_parameter('initial_belief_xyyaw').value)
+        if len(initial_xyyaw) != 3 or not all(math.isfinite(value) for value in initial_xyyaw):
+            raise RuntimeError("initial_belief_xyyaw must contain finite [x, y, yaw]")
+        self.initial_belief_xyyaw = initial_xyyaw
+        self.initial_belief_xy_std_m = float(
+            self.get_parameter('initial_belief_xy_std_m').value
+        )
+        self.initial_belief_yaw_std_rad = float(
+            self.get_parameter('initial_belief_yaw_std_rad').value
+        )
+        if (not math.isfinite(self.initial_belief_xy_std_m)
+                or self.initial_belief_xy_std_m <= 0.0
+                or not math.isfinite(self.initial_belief_yaw_std_rad)
+                or self.initial_belief_yaw_std_rad <= 0.0):
+            raise RuntimeError("initial belief standard deviations must be finite and positive")
         if self.camera_network_artifact_path and self.use_pixel_correction:
             raise RuntimeError('camera network requires metric camera corrections; its IWAI cost proxy is not measurement noise')
         self.state_correction_mode = str(
@@ -860,6 +886,11 @@ class UnicyclePlannerNode(Node):
         self._latest_belief_age_s = math.nan
         with self._data_lock:
             self._ensure_belief_runtime_locked()
+        if self.initial_belief_from_task_start:
+            # Lockstep campaigns begin at simulation time zero.  Anchoring there
+            # makes the first image an ordinary timestamped update even if it
+            # arrives before the first belief-publication timer tick.
+            self._initialize_declared_start_belief(self._ns_stamp(0))
 
         planner_rate = self.local_plan_rate if self.use_hierarchical else self.plan_rate
         self._plan_period_s = 1.0 / max(planner_rate, 0.1)
@@ -919,6 +950,38 @@ class UnicyclePlannerNode(Node):
             self._belief_record = BeliefRecord.create(
                 self.belief_m, self.belief_S, self._stamp_ns(self.belief_stamp),
                 self._belief_frame_id, self._belief_epoch, 0)
+
+    @_serialized_correction
+    def _initialize_declared_start_belief(self, stamp_msg):
+        """Commit the declared task-start prior before any camera observation.
+
+        The configured pose is supplied by the task definition at launch.  It is
+        deliberately distinct from Gazebo ground truth and is propagated with the
+        same odometry process model as every later belief state.
+        """
+        if not getattr(self, 'initial_belief_from_task_start', False):
+            return False
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            if self._belief_record is not None:
+                return True
+            now_ns = self._observe_belief_clock_locked()
+            if now_ns is None:
+                return False
+            stamp_ns = self._stamp_ns(stamp_msg)
+            if stamp_ns > now_ns:
+                return False
+            m = np.asarray(self.initial_belief_xyyaw, dtype=float)
+            P = np.diag([
+                self.initial_belief_xy_std_m ** 2,
+                self.initial_belief_xy_std_m ** 2,
+                self.initial_belief_yaw_std_rad ** 2,
+            ])
+            self._commit_belief(
+                m, self._regularize_state_covariance(P), stamp_msg,
+                motion_support=MotionSupport(stamp_ns, stamp_ns),
+            )
+            return True
 
     @staticmethod
     def _stamp_ns(stamp_msg):
@@ -2832,6 +2895,11 @@ class UnicyclePlannerNode(Node):
             self._ensure_belief_runtime_locked()
             state_ref = deepcopy(getattr(self, 'state_msg', None))
             record = self._belief_record
+        if record is None:
+            self._initialize_declared_start_belief(now_msg)
+        with self._data_lock:
+            state_ref = deepcopy(getattr(self, 'state_msg', None))
+            record = self._belief_record
             motion = self._motion_snapshot_locked()
             last_cmd = self.last_cmd.copy()
             goal_revision = self._goal_revision
@@ -2992,6 +3060,10 @@ class UnicyclePlannerNode(Node):
             self._commit_belief(m, P, self._ns_stamp(target_ns), motion_support=support)
 
     def _belief_publish_tick(self):
+        with self._data_lock:
+            now_ns = self._observe_belief_clock_locked()
+        if now_ns is not None:
+            self._initialize_declared_start_belief(self._ns_stamp(now_ns))
         self._advance_belief_anchor()
         with self._data_lock:
             now_ns = self._observe_belief_clock_locked()

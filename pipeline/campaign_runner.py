@@ -1429,6 +1429,7 @@ def _existing_entry_matches_config(
         'preselected_route_endpoint_tolerance_m',
         'preselected_route_sample_step_m',
         'state_reanchor_m', 'state_max_predict_dt_s', 'state_reject_inflate_m2',
+        'initial_belief_xy_std_m', 'initial_belief_yaw_std_rad',
         'stale_belief_inflate_m2_per_s', 'stale_belief_inflate_cap_m2',
         'yolo_max_batch_stamp_skew_s',
         'manager_min_spatial_trust', 'manager_decision_rate_hz',
@@ -1479,6 +1480,7 @@ def _existing_entry_matches_config(
         'manager_fusion_mode', 'manager_require_gp_artifacts',
         'manager_use_task_start_as_bootstrap_prior',
         'manager_bootstrap_prior_counts_as_support',
+        'initial_belief_from_task_start',
     )
     for key in bool_keys:
         expected = expected_value(key)
@@ -1752,6 +1754,9 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         # Recovery policy: what the belief does when a correction is refused or
         # cannot be replayed. Passed explicitly so it lands in the run manifest.
         f'state_reanchor_m:={cfg.get("state_reanchor_m", 0.0)}',
+        f'initial_belief_from_task_start:={str(cfg.get("initial_belief_from_task_start", False)).lower()}',
+        f'initial_belief_xy_std_m:={cfg.get("initial_belief_xy_std_m", 0.10)}',
+        f'initial_belief_yaw_std_rad:={cfg.get("initial_belief_yaw_std_rad", 0.2617993877991494)}',
         f'state_max_predict_dt_s:={cfg.get("state_max_predict_dt_s", 1.5)}',
         f'state_reject_inflate_m2:={cfg.get("state_reject_inflate_m2", 0.0)}',
         f'stale_belief_inflate_m2_per_s:={cfg.get("stale_belief_inflate_m2_per_s", 0.0)}',
@@ -1798,6 +1803,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'pixel_timeout_s', 'skip_stale_pixel_correction',
         'bev_y_calibration_offset_m', 'bev_affine_calibration', 'pixel_max_correction_jump_m',
         'pixel_correction_nis_threshold', 'use_diagnostic_odom_localization',
+        'initial_belief_from_task_start', 'initial_belief_xy_std_m',
+        'initial_belief_yaw_std_rad',
         'debug_runtime',
         'optimizer_ftol', 'optimizer_gtol', 'optimizer_warm_start',
         'optimizer_initial_routes_json',

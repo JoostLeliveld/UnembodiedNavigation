@@ -45,6 +45,11 @@ def _planner_precision_arguments():
         DeclareLaunchArgument('r_miss_uv', default_value='120.0'),
         DeclareLaunchArgument('pixel_correction_nis_threshold', default_value='9.21',
                               description='Reject pixel corrections with 2D NIS above this threshold; 0 disables NIS gating.'),
+        DeclareLaunchArgument(
+            'initial_belief_from_task_start', default_value='false',
+            description='Seed the estimator from the declared task start instead of waiting for a camera batch.'),
+        DeclareLaunchArgument('initial_belief_xy_std_m', default_value='0.10'),
+        DeclareLaunchArgument('initial_belief_yaw_std_rad', default_value='0.2617993877991494'),
         DeclareLaunchArgument('state_reanchor_m', default_value='0.0'),
         DeclareLaunchArgument('state_max_predict_dt_s', default_value='1.5'),
         DeclareLaunchArgument('state_reject_inflate_m2', default_value='0.0'),

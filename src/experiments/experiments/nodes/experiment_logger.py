@@ -322,6 +322,9 @@ class ExperimentLogger(Node):
         # Recovery policy. Recorded because it decides what the belief does when a
         # correction is refused, which is not visible in any error column.
         self.declare_parameter('state_reanchor_m', 0.0)
+        self.declare_parameter('initial_belief_from_task_start', False)
+        self.declare_parameter('initial_belief_xy_std_m', 0.10)
+        self.declare_parameter('initial_belief_yaw_std_rad', math.radians(15.0))
         self.declare_parameter('state_max_predict_dt_s', 1.5)
         self.declare_parameter('state_reject_inflate_m2', 0.0)
         self.declare_parameter('stale_belief_inflate_m2_per_s', 0.0)
@@ -405,6 +408,12 @@ class ExperimentLogger(Node):
             raise RuntimeError('operational_belief_timeout_s must be finite and positive')
         self.heading_update_mode = str(self.get_parameter('heading_update_mode').value)
         self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
+        self.initial_belief_from_task_start = bool(
+            self.get_parameter('initial_belief_from_task_start').value)
+        self.initial_belief_xy_std_m = float(
+            self.get_parameter('initial_belief_xy_std_m').value)
+        self.initial_belief_yaw_std_rad = float(
+            self.get_parameter('initial_belief_yaw_std_rad').value)
         self.state_max_predict_dt_s = float(
             self.get_parameter('state_max_predict_dt_s').value)
         self.state_reject_inflate_m2 = float(
@@ -836,6 +845,9 @@ class ExperimentLogger(Node):
             'state_correction_mode': self.state_correction_mode,
             'heading_update_mode': self.heading_update_mode,
             'state_reanchor_m': self.state_reanchor_m,
+            'initial_belief_from_task_start': self.initial_belief_from_task_start,
+            'initial_belief_xy_std_m': self.initial_belief_xy_std_m,
+            'initial_belief_yaw_std_rad': self.initial_belief_yaw_std_rad,
             'state_max_predict_dt_s': self.state_max_predict_dt_s,
             'state_reject_inflate_m2': self.state_reject_inflate_m2,
             'stale_belief_inflate_m2_per_s': self.stale_belief_inflate_m2_per_s,

@@ -39,6 +39,9 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     'bev_affine_calibration': '',
     'pixel_max_correction_jump_m': '0.0',
     'pixel_correction_nis_threshold': '9.21',
+    'initial_belief_from_task_start': 'false',
+    'initial_belief_xy_std_m': '0.10',
+    'initial_belief_yaw_std_rad': '0.2617993877991494',
     # How the belief recovers when a correction is refused or cannot be replayed.
     # Declared here so every run's provenance states its recovery policy instead of
     # inheriting whatever the runtime default happened to be that week.
@@ -519,6 +522,15 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'bev_affine_calibration': _launch_value(context, 'bev_affine_calibration', PAPER_LAUNCH_DEFAULTS['bev_affine_calibration']),
         'pixel_max_correction_jump_m': float(_launch_value(context, 'pixel_max_correction_jump_m', PAPER_LAUNCH_DEFAULTS['pixel_max_correction_jump_m'])),
         'pixel_correction_nis_threshold': float(_launch_value(context, 'pixel_correction_nis_threshold', PAPER_LAUNCH_DEFAULTS['pixel_correction_nis_threshold'])),
+        'initial_belief_from_task_start': _as_bool(_launch_value(
+            context, 'initial_belief_from_task_start',
+            PAPER_LAUNCH_DEFAULTS['initial_belief_from_task_start'])),
+        'initial_belief_xy_std_m': float(_launch_value(
+            context, 'initial_belief_xy_std_m',
+            PAPER_LAUNCH_DEFAULTS['initial_belief_xy_std_m'])),
+        'initial_belief_yaw_std_rad': float(_launch_value(
+            context, 'initial_belief_yaw_std_rad',
+            PAPER_LAUNCH_DEFAULTS['initial_belief_yaw_std_rad'])),
         'state_reanchor_m': float(_launch_value(
             context, 'state_reanchor_m', PAPER_LAUNCH_DEFAULTS['state_reanchor_m'])),
         'state_max_predict_dt_s': float(_launch_value(
@@ -1699,6 +1711,9 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'bev_y_calibration_offset_m': cfg['bev_y_calibration_offset_m'],
                 'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
                 'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
+                'initial_belief_from_task_start': cfg['initial_belief_from_task_start'],
+                'initial_belief_xy_std_m': cfg['initial_belief_xy_std_m'],
+                'initial_belief_yaw_std_rad': cfg['initial_belief_yaw_std_rad'],
                 'state_reanchor_m': cfg['state_reanchor_m'],
                 'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
                 'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
@@ -2346,6 +2361,13 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'bev_affine_calibration': cfg.get('bev_affine_calibration', ''),
             'pixel_max_correction_jump_m': cfg['pixel_max_correction_jump_m'],
             'pixel_correction_nis_threshold': cfg['pixel_correction_nis_threshold'],
+            'initial_belief_from_task_start': cfg['initial_belief_from_task_start'],
+            'initial_belief_xyyaw': [
+                float(cfg['spawn']['x']), float(cfg['spawn']['y']),
+                float(cfg['spawn']['yaw']),
+            ],
+            'initial_belief_xy_std_m': cfg['initial_belief_xy_std_m'],
+            'initial_belief_yaw_std_rad': cfg['initial_belief_yaw_std_rad'],
             'state_reanchor_m': cfg['state_reanchor_m'],
             'state_max_predict_dt_s': cfg['state_max_predict_dt_s'],
             'state_reject_inflate_m2': cfg['state_reject_inflate_m2'],
