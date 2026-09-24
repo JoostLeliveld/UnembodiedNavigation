@@ -35,11 +35,21 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
 
 1. Task B start: moved to (-7.6, -7.5), yaw 90 degrees (author's decision, 2026-09-24).
 2. Final audit: done (see above).
-3. Routes: `pipeline/campaign_configs.py`, `routes.sh`; replay every solved route through
-   `ff_fb` inside the driveable region; `plot_routes.py` for review.
-4. Lockstep qualification: one route end to end; the same task and seed twice must give an
-   identical trajectory; measure wall-clock per run; define the run time limit in
-   simulated seconds.
+3. Routes: 30 solved (`logs/thesis/routes/`); all 30 replayed through `ff_fb` arrive inside
+   the driveable region (`follower_replay_check.json`); overview `routes_overview.png`.
+4. Lockstep qualification (2026-09-24 night; runs in `logs/thesis/qualification/`, the
+   pre-fix attempts under `superseded_before_lockstep_fix/`). Four defects found and fixed:
+   the manager's decision timer ran on the simulation clock the scheduler holds (deadlock);
+   the scheduler's camera phase depended on start-up timing (now aligned to the camera
+   instant); the command barrier deadlocked before the first plan (now waits only while the
+   controller publishes); after the terminal stop the perception barriers froze the clock
+   so rest was never verified (now odometry only). Also: the logger wrote truth after
+   closing its file, and had dropped `robot_collision_radius_m` from the run manifest.
+   **Not bitwise identical**: three identical runs follow the same path (Hausdorff 5.5 to
+   10.5 cm) but differ in timing (mission start is a wall timer; planner and command timers
+   run on the simulation clock with start-up-dependent phase; actuation noise is drawn per
+   message). Re-measure with `compare_runs` before quoting. Wall time is about 2 to 3 min
+   per run.
 5. Campaign manifest locking every input by path and hash; then the campaign, seed by seed,
    with a disk guard and keep-awake (laptop lid open).
 6. Figures: rebuild from `logs/thesis/`; `make_camera_views.py` must read through
