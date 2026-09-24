@@ -72,7 +72,8 @@ def main():
     cbar.outline.set_linewidth(0.4)
     cbar.set_ticks([2, 5, 10, 20, 50]); cbar.set_ticklabels(["2", "5", "10", "20", "50"])
     cbar.minorticks_off()
-    P.save(fig, f"removal_mechanism_{TASK.split('_')[2]}")
+    # camera letter plus task name: the letter alone collides for the two camera-E tasks
+    P.save(fig, f"removal_mechanism_{TASK.removeprefix('thesis10_camera_')}")
 
 
 if __name__ == "__main__":
