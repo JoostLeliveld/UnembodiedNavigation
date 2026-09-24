@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import hashlib
 import io
 import os
@@ -438,6 +439,11 @@ def parse_common_launch_config(context) -> Dict[str, object]:
             context, 'manager_use_task_start_as_bootstrap_prior', 'false')),
         'manager_bootstrap_prior_counts_as_support': _as_bool(_launch_value(
             context, 'manager_bootstrap_prior_counts_as_support', 'false')),
+        'initial_belief_from_task_start': _as_bool(_launch_value(
+            context, 'initial_belief_from_task_start', 'false')),
+        'initial_belief_sigma_xy_m': float(_launch_value(context, 'initial_belief_sigma_xy_m', '0.10')),
+        'initial_belief_sigma_theta_rad': float(_launch_value(
+            context, 'initial_belief_sigma_theta_rad', str(math.radians(15.0)))),
         'manager_require_gp_artifacts': _as_bool(_launch_value(context, 'manager_require_gp_artifacts', 'true')),
         'manager_fusion_max_timestamp_spread_s': float(
             _launch_value(context, 'manager_fusion_max_timestamp_spread_s', '0.05')
@@ -1924,6 +1930,7 @@ def manager_arm_settings(cfg: Dict[str, object]) -> Dict[str, object]:
             cfg.get('manager_use_task_start_as_bootstrap_prior', False)),
         'manager_bootstrap_prior_counts_as_support': _as_bool(
             cfg.get('manager_bootstrap_prior_counts_as_support', False)),
+        'assume_initial_belief_anchor': _as_bool(cfg.get('initial_belief_from_task_start', False)),
         'manager_fusion_max_timestamp_spread_s': float(
             cfg.get('manager_fusion_max_timestamp_spread_s', 0.05)),
         'manager_covariance_profile': str(
@@ -2359,6 +2366,12 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             # Spawn-yaw offset so the multicam belief heading lands in map_bev
             # (single-cam path applies this in pixel_to_bev; multicam replaces it).
             'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
+            # Declared initial prior at the task start (the task declaration, not ground truth).
+            'initial_belief_from_task_start': _as_bool(cfg.get('initial_belief_from_task_start', False)),
+            'initial_belief_xyyaw': [float(cfg['spawn']['x']), float(cfg['spawn']['y']),
+                                     float(cfg['spawn']['yaw'])],
+            'initial_belief_sigma_xy_m': float(cfg.get('initial_belief_sigma_xy_m', 0.10)),
+            'initial_belief_sigma_theta_rad': float(cfg.get('initial_belief_sigma_theta_rad', math.radians(15.0))),
             'local_controller_type': cfg['local_controller_type'],
             'min_state_cov': cfg['min_state_cov'],
             'debug_runtime': cfg['debug_runtime'],

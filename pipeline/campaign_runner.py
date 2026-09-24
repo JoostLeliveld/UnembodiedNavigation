@@ -101,6 +101,7 @@ BOOL_CONFIG_KEYS = frozenset({
     'bridge_camera_d', 'multicam_belief', 'manager_require_source_batch_id',
     'manager_use_task_start_as_bootstrap_prior',
     'manager_bootstrap_prior_counts_as_support',
+    'initial_belief_from_task_start',
     'manager_commissioned_per_camera_sigma',
     'manager_correction_timestamp_compensation',
     'manager_require_consistency_when_source_available', 'manager_fusion_mode',
@@ -1479,6 +1480,7 @@ def _existing_entry_matches_config(
         'manager_fusion_mode', 'manager_require_gp_artifacts',
         'manager_use_task_start_as_bootstrap_prior',
         'manager_bootstrap_prior_counts_as_support',
+        'initial_belief_from_task_start',
     )
     for key in bool_keys:
         expected = expected_value(key)
@@ -1840,6 +1842,8 @@ def _build_launch_cmd(cfg: dict, task_name: str, condition_id: str, seed: int, l
         'manager_bootstrap_max_disagreement_m',
         'manager_use_task_start_as_bootstrap_prior',
         'manager_bootstrap_prior_counts_as_support',
+        'initial_belief_from_task_start', 'initial_belief_sigma_xy_m',
+        'initial_belief_sigma_theta_rad',
         'manager_fusion_max_timestamp_spread_s',
         'manager_covariance_profile',
         'manager_commissioned_calibration_path', 'manager_commissioned_sigma_px',

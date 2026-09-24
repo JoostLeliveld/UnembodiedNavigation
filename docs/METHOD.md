@@ -679,3 +679,14 @@ Decided by the author, frozen before any v10 image is captured.
   admitted camera in a synchronous batch is fused in information form. The former 0.6 m gate
   was never derived and did not change a fusion decision in the v8 campaign. Outliers remain
   subject to the estimator's NIS gate on the fused measurement.
+- **Declared initial prior instead of a camera bootstrap (author, 2026-09-24 night).** The
+  belief starts at the task's declared start pose, never ground truth:
+  m0 = [x_start, y_start, theta_start], P0 = diag(0.10^2, 0.10^2, (15 deg)^2), committed at
+  the first accepted odometry stamp (`initial_belief_from_task_start: true` in both campaign
+  templates; `initial_belief_sigma_xy_m` 0.10, `initial_belief_sigma_theta_rad` 15 deg). The
+  robot therefore starts without any camera. The first camera batch is an ordinary NIS-gated
+  update; there is no `accepted_bootstrap` event and no two-camera quorum
+  (`manager_use_task_start_as_bootstrap_prior` and `manager_bootstrap_prior_counts_as_support`
+  are false; the camera manager treats the belief as anchored from the start). The mission's
+  `initial_belief_max_sigma_m` (0.3 m) is met by the prior, so planning starts at once. With the
+  flag off the former camera bootstrap is unchanged.

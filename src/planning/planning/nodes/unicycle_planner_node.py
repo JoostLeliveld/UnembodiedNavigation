@@ -318,6 +318,12 @@ class UnicyclePlannerNode(Node):
         # belief heading stays in the raw-odom frame and the robot plans/drives
         # ~90 deg off. Default 0 keeps the single-camera path unchanged.
         _declare_if_not('odom_yaw_offset_rad', 0.0)
+        # Declared initial prior (METHOD amendment 2026-09-24 night): the belief starts at the
+        # task's declared start pose, not at a camera bootstrap. Off keeps the camera bootstrap.
+        _declare_if_not('initial_belief_from_task_start', False)
+        _declare_if_not('initial_belief_xyyaw', [0.0, 0.0, 0.0])
+        _declare_if_not('initial_belief_sigma_xy_m', 0.10)
+        _declare_if_not('initial_belief_sigma_theta_rad', math.radians(15.0))
         # Divergence guards for the multicam /state/bev EKF. The fused correction
         # is camera-derived + manager-gated (reliable ~0.2 m), so if the predicted
         # belief lands implausibly far from a fresh correction the belief (or a
@@ -627,6 +633,18 @@ class UnicyclePlannerNode(Node):
         self.odom_child_frame_id = str(self.get_parameter('odom_child_frame_id').value)
         self.use_odom_for_predict = _as_bool(self.get_parameter('use_odom_for_predict').value)
         self.odom_yaw_offset_rad = float(self.get_parameter('odom_yaw_offset_rad').value)
+        self.initial_belief_from_task_start = _as_bool(
+            self.get_parameter('initial_belief_from_task_start').value)
+        self.initial_belief_xyyaw = [float(v) for v in self.get_parameter('initial_belief_xyyaw').value]
+        self.initial_belief_sigma_xy_m = float(self.get_parameter('initial_belief_sigma_xy_m').value)
+        self.initial_belief_sigma_theta_rad = float(
+            self.get_parameter('initial_belief_sigma_theta_rad').value)
+        if self.initial_belief_from_task_start and (
+                len(self.initial_belief_xyyaw) != 3
+                or not all(math.isfinite(v) for v in self.initial_belief_xyyaw)
+                or not self.initial_belief_sigma_xy_m > 0.0
+                or not self.initial_belief_sigma_theta_rad > 0.0):
+            raise ValueError('initial_belief_from_task_start needs a finite [x, y, yaw] and positive sigmas')
         self.state_reanchor_m = float(self.get_parameter('state_reanchor_m').value)
         self.state_max_predict_dt_s = float(self.get_parameter('state_max_predict_dt_s').value)
         self.state_reject_inflate_m2 = max(
@@ -1539,6 +1557,7 @@ class UnicyclePlannerNode(Node):
             self._flush_pending_odom_locked(now_ns)
         # Received counts as processed: a buffered sample is committed as soon as
         # /clock reaches it, with no further work in this node.
+        self._init_belief_from_task_prior(stamp_ns)
         self._publish_odometry_processed(stamp_ns)
 
     def _publish_odometry_processed(self, stamp_ns) -> None:
@@ -2430,6 +2449,31 @@ class UnicyclePlannerNode(Node):
             self._state_measurement_cov(state_msg),
             reason=reason,
         )
+
+    def _init_belief_from_task_prior(self, stamp_ns) -> None:
+        """Start the belief at the declared task start, at the first accepted odometry stamp.
+
+        The prior is N([x0, y0, theta0], diag(s_xy^2, s_xy^2, s_theta^2)) from the task
+        declaration, never ground truth. Stamping it at the first odometry sample gives the
+        replay motion support from t0, and every later camera batch is newer, so the first
+        camera batch is an ordinary NIS-gated update. It is not a correction: no correction
+        event is published.
+        """
+        if not getattr(self, 'initial_belief_from_task_start', False) or stamp_ns is None:
+            return
+        with self._data_lock:
+            self._ensure_belief_runtime_locked()
+            accepted_ns = getattr(self, '_odom_accepted_stamp_ns', None)
+            if (self._belief_record is not None or accepted_ns is None
+                    or self._observe_belief_clock_locked() is None):
+                return
+            x0, y0, yaw0 = self.initial_belief_xyyaw
+            stamp = self._ns_stamp(int(accepted_ns))
+            h = self._map_frame_heading(stamp)
+            m = np.array([x0, y0, h if h is not None else wrap_angle(yaw0)], dtype=float)
+            s_xy, s_th = self.initial_belief_sigma_xy_m, self.initial_belief_sigma_theta_rad
+            P = np.diag([s_xy ** 2, s_xy ** 2, s_th ** 2])
+            self._commit_belief(m, self._regularize_state_covariance(P), stamp)
 
     def _reanchor_belief_to_xy(self, stamp_msg, z_xy, R, reason=""):
         with self._data_lock:

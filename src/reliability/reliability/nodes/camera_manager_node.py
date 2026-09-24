@@ -656,6 +656,10 @@ class CameraManagerNode(Node):
         # initialise the camera belief by itself.
         self.declare_parameter("bootstrap_prior_counts_as_support", False)
         self.declare_parameter("bootstrap_prior_xyyaw", [0.0, 0.0, 0.0])
+        # The planner starts from a declared initial prior (METHOD amendment 2026-09-24
+        # night): treat the belief as anchored from the start, so no batch waits for a
+        # camera bootstrap quorum.
+        self.declare_parameter("assume_initial_belief_anchor", False)
         # Optional paired covariance floor. Both axes must be zero or both positive.
         self.declare_parameter("bias_floor_along_slope_m_per_m", 0.0)
         self.declare_parameter("bias_floor_across_slope_m_per_m", 0.0)
@@ -898,7 +902,7 @@ class CameraManagerNode(Node):
         self._belief_prediction_history = deque(maxlen=400)
         self._admission_beliefs = AdmissionBeliefHistory(self.frame_id)
         self._canonical_belief_seen = False
-        self._has_operational_anchor = False
+        self._has_operational_anchor = bool(self.get_parameter("assume_initial_belief_anchor").value)
         self.odometry_frame_id = str(self.get_parameter("odometry_frame_id").value)
         self.odometry_to_map_yaw_rad = float(self.get_parameter("odometry_to_map_yaw_rad").value)
         # Measured poses only. Corrected-belief jumps cannot support displacement.

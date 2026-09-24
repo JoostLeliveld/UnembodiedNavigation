@@ -95,8 +95,8 @@ manager_decision_rate_hz: 5.0
 manager_require_source_batch_id: true
 manager_bootstrap_min_cameras: 2
 manager_bootstrap_max_disagreement_m: 0.3
-manager_use_task_start_as_bootstrap_prior: true
-manager_bootstrap_prior_counts_as_support: true
+manager_use_task_start_as_bootstrap_prior: false
+manager_bootstrap_prior_counts_as_support: false
 manager_fusion_disagreement_gate_m: 0.0   # no median gate (METHOD amendment 2026-09-24 night)
 manager_fusion_max_timestamp_spread_s: 0.05
 manager_correction_timestamp_compensation: false
@@ -250,3 +250,7 @@ lockstep: true
 lockstep_control_step_iterations: 100
 lockstep_camera_every_control_steps: 2
 lockstep_max_control_steps: 0
+# Declared initial prior at the task start (METHOD amendment 2026-09-24 night): no camera bootstrap.
+initial_belief_from_task_start: true
+initial_belief_sigma_xy_m: 0.10
+initial_belief_sigma_theta_rad: 0.2617993877991494
