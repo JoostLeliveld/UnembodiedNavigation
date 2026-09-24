@@ -3,7 +3,7 @@
 what the robot then does.
 
 Rows: all cameras / dropout of the task camera. Columns: global, per-camera, spatial model.
-Background: the model's own planning field as one-sigma position uncertainty (cm), the
+Background: the camera-network field as one-sigma position uncertainty (cm), the
 inverse of its summed per-camera precision; blank where no camera supports a position.
 Lines: the route the model planned (thick) and the three executed true paths (thin);
 x marks where a footprint first left the driveable region, o where a failed run stopped without leaving it.
@@ -59,16 +59,12 @@ def main():
                     solid_capstyle="round")
             ax.plot(task["start"]["x"], task["start"]["y"], "o", ms=4, color=P.INK, zorder=11)
             ax.plot(task["goal"]["x"], task["goal"]["y"], "*", ms=8, color="white", mec=P.INK, mew=0.6, zorder=11)
-            wins = sum(r["success"] == "1" for r in rows if r["model"] == model and r["state"] == state)
-            ax.text(0.99, 0.995, f"{wins}/3 succeeded", transform=ax.transAxes, ha="right", va="top",
-                    fontsize=7.5, color=P.INK, fontweight="bold",
-                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=12)
             if i == 0:
                 ax.set_title(P.MODEL_LABEL[model], color=colour, fontweight="bold", pad=2)
         axes[i, 0].text(-0.03, 0.5, "all cameras" if state == "intact" else f"camera {task['removed'][-1]} dropout",
                         transform=axes[i, 0].transAxes, rotation=90, ha="right", va="center", fontsize=8)
     cbar = fig.colorbar(mesh, ax=axes, shrink=0.72, pad=0.01, aspect=28)
-    cbar.set_label("planned position uncertainty, one sigma (cm)\nhatched: no camera support")
+    cbar.set_label("camera-network uncertainty, one sigma (cm)")
     cbar.outline.set_linewidth(0.4)
     cbar.set_ticks([2, 5, 10, 20, 50]); cbar.set_ticklabels(["2", "5", "10", "20", "50"])
     cbar.minorticks_off()

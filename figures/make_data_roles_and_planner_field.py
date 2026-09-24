@@ -113,8 +113,12 @@ def planner_field_construction_figure() -> None:
     vmax = float(np.percentile(fields[-1][0], 90))
 
     warehouse = layout()
-    fig, axes = plt.subplots(1, 3, figsize=(7.16, 2.30), constrained_layout=True,
-                             sharex=True, sharey=True)
+    # The first two fields are spatially constant.  Keep them visible for the
+    # comparison, but give the varying spatial field the room it needs.
+    fig = plt.figure(figsize=(7.16, 2.30), constrained_layout=True)
+    grid = fig.add_gridspec(1, 4, width_ratios=(1.0, 1.0, 2.05, 0.10))
+    axes = [fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1]),
+            fig.add_subplot(grid[0, 2])]
     image = None
     for ax, (values, title) in zip(axes, fields, strict=True):
         image = ax.pcolormesh(xs, ys, values, shading="nearest", cmap="viridis",
@@ -132,8 +136,7 @@ def planner_field_construction_figure() -> None:
         ax.set_xlabel("east (m)", fontsize=8.0)
         ax.tick_params(labelsize=7.2)
     axes[0].set_ylabel("north (m)", fontsize=8.0)
-    bar = fig.colorbar(image, ax=list(axes), shrink=0.92, pad=0.012, aspect=18,
-                       extend="max")
+    bar = fig.colorbar(image, cax=fig.add_subplot(grid[0, 3]), extend="max")
     bar.set_label(r"$\frac{1}{2}\mathrm{tr}\sum_i\Lambda_{m,i}(p)$ (m$^{-2}$)",
                   fontsize=8.0)
     bar.ax.tick_params(labelsize=7.2)

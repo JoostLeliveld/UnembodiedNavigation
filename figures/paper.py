@@ -129,9 +129,7 @@ def network_sigma(model: str, removed: str | None = None):
 
 
 def draw_sigma(ax, xs, ys, sigma, norm):
-    """The field over a hatched ground: hatch shows through wherever no camera supports it."""
-    ax.add_patch(Rectangle((xs[0], ys[0]), xs[-1] - xs[0], ys[-1] - ys[0], fc="white",
-                           ec="#d9a38a", hatch="////", lw=0, zorder=1.5))
+    """Draw the finite camera-network uncertainty field; masked cells remain blank."""
     return ax.pcolormesh(xs, ys, sigma, shading="nearest", cmap=SIGMA_CMAP, norm=norm,
                          zorder=2, rasterized=True)
 
