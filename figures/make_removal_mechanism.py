@@ -2,11 +2,11 @@
 """The mechanism in one task: what each model believes it loses when a camera goes, and
 what the robot then does.
 
-Rows: all cameras / the task camera removed. Columns: global, per-camera, spatial model.
+Rows: all cameras / dropout of the task camera. Columns: global, per-camera, spatial model.
 Background: the model's own planning field as one-sigma position uncertainty (cm), the
 inverse of its summed per-camera precision; blank where no camera supports a position.
 Lines: the route the model planned (thick) and the three executed true paths (thin);
-x marks where a footprint first left the driveable region, o where a run ended stuck.
+x marks where a footprint first left the driveable region, o where a failed run stopped without leaving it.
 
     python3 figures/make_removal_mechanism.py [TASK]
 """
@@ -52,7 +52,7 @@ def main():
                 if r["collision"] == "1":
                     ax.plot(float(r["collision_x"]), float(r["collision_y"]), "x", color=P.COLLISION,
                             ms=6, mew=1.4, zorder=10)
-                elif r["outcome"] == "stuck":
+                elif r["success"] != "1":
                     ax.plot(poses[-1, 0], poses[-1, 1], "o", mfc="none", mec=P.STUCK, ms=5, mew=1.2, zorder=10)
             route = P.planned_route(TASK, f"{model}_{state}")
             ax.plot(route[:, 0], route[:, 1], color=colour, lw=2.2, alpha=0.35, zorder=4,
@@ -65,7 +65,7 @@ def main():
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=12)
             if i == 0:
                 ax.set_title(P.MODEL_LABEL[model], color=colour, fontweight="bold", pad=2)
-        axes[i, 0].text(-0.03, 0.5, "all cameras" if state == "intact" else f"camera {task['removed'][-1]} removed",
+        axes[i, 0].text(-0.03, 0.5, "all cameras" if state == "intact" else f"camera {task['removed'][-1]} dropout",
                         transform=axes[i, 0].transAxes, rotation=90, ha="right", va="center", fontsize=8)
     cbar = fig.colorbar(mesh, ax=axes, shrink=0.72, pad=0.01, aspect=28)
     cbar.set_label("planned position uncertainty, one sigma (cm)\nhatched: no camera support")
