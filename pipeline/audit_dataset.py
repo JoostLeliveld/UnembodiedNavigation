@@ -5,7 +5,11 @@ Checks, each on the rows `dataset.load_rows()` returns:
 1. no robot-absent run remains (the loader raises otherwise);
 2. every (capture source, pose) has exactly five camera rows, and every plan pose is used
    by exactly one source;
-3. every capture source has the same world and capture-script hashes as v5;
+3. every capture source has the v5 world and capture-script hashes, except the v9 audit:
+   its world is accepted only through the passing equivalence record
+   (captures/v9/world_equivalence/report.json: identical images but one static pixel of
+   camera B) and its script only as today's capture_positions.py (renamed paths and the
+   stricter pose check with the loose objects; image capture unchanged);
 4. per capture session, the share of in-frame camera rows whose mask contains the robot is
    no more than 10 points below that of the other sessions' rows by the same camera within
    0.5 m (like for like, because visibility varies from ~0.3 to ~0.8 between regions; the
@@ -61,8 +65,17 @@ def main() -> int:
         m = json.loads((directory / "capture_manifest.json").read_text())
         identities[name] = (m.get("world_sha256"), m.get("capture_script_sha256"))
     report["identities"] = {k: [str(a)[:12], str(b)[:12]] for k, (a, b) in identities.items()}
-    if len(set(identities.values())) != 1:
-        failures.append("capture identity")
+    v5_identity = identities["part1"]
+    equivalence = json.loads((REPO / "logs/thesis/captures/v9/world_equivalence/report.json").read_text())
+    import hashlib
+    script = hashlib.sha256((REPO / "pipeline/capture/capture_positions.py").read_bytes()).hexdigest()
+    v9_identity = (equivalence["current_world_sha256"], script)
+    report["world_equivalence_passed"] = bool(equivalence.get("passed"))
+    for name, identity in identities.items():
+        allowed = {v5_identity} | ({v9_identity} if name == "audit_v9" and equivalence.get("passed")
+                                   and equivalence.get("v8_world_sha256") == v5_identity[0] else set())
+        if identity not in allowed:
+            failures.append(f"capture identity: {name}")
 
     in_frame = [r for r in rows if r.get("nominal_in_frame") in ("1", "True")]
     session_of = [f"{r['capture_source']}:{r['capture_session_id'][:8]}" for r in in_frame]

@@ -13,6 +13,7 @@ import copy
 import csv
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -32,7 +33,8 @@ def sha(rel: str) -> str:
 
 
 def rel(path: Path) -> str:
-    return str(Path(path).resolve().relative_to(REPO))
+    # absolute, not resolved: logs/ may be a symlink into another checkout's data
+    return str(Path(os.path.abspath(path)).relative_to(REPO))
 
 
 def main() -> int:
