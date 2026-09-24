@@ -27,8 +27,15 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
 - **Final audit**: opened once, 2026-09-24 01:30 (`logs/thesis/final_audit/report.json`,
   `final_audit_fusion/report.json`; protocol `logs/thesis/final_audit_protocol.json`).
   150 positions, 3,000 opportunities, 1,633 admitted. Quote numbers from the reports.
-- **Routes**: 30 solved and checked. **Campaign**: running since 2026-09-24 03:01 (manifest
-  `logs/thesis/campaign/manifest.json`, driver log in `pipeline.log`).
+- **Routes**: 30 solved and checked.
+- **Campaign: done** (2026-09-24 03:38 to 07:33, commit 5e1e802b, manifest
+  `logs/thesis/campaign/manifest.json`, no input drift afterwards). 90 of 90 cells have a
+  valid outcome; 3 runs were infra_invalid on the first attempt (lockstep alignment step,
+  fixed afterwards in c0c56b17) and valid on the retry. Analysis: `pipeline/analyze_campaign.py`
+  -> `logs/thesis/analysis/` (`runs.csv`, `summary.json`, `trajectories.png`). Success
+  per arm (of 15; re-read `summary.json` before quoting): spatial 15 intact / 14 removal,
+  per-camera 14 / 11, global 15 / 8. The spatial model changes route under removal in four
+  of five tasks (not task B).
 - **Goal rule changed before the campaign** (agent, overnight): the template stopped at
   0.30 m on the belief, the same radius the success score uses, against the author's rerun
   decision of 2026-09-22. Now stop 0.10 m (belief), success < 0.30 m (ground truth), 90 s
@@ -42,6 +49,13 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
   `pre-lean-20260924` holds everything removed during the lean-up.
 
 ## Open items, in order
+
+0. For the author (from the overnight run): (a) review the goal-rule change and the task-B
+   admission fix (both in git with reasons); (b) task E-long has a corner at about
+   (1.3, 8.4) that two intact runs clipped (one in qualification, one per-camera intact in
+   the campaign): a real outcome, but it may be worth a sentence; (c) the agent's tape-clear
+   warning logs `reason=unspecified_call_site`, so the stop cause of `stuck` runs has to be
+   inferred from belief sigma; (d) lockstep runs are not bitwise identical (see item 4).
 
 1. Task B start: moved to (-7.6, -7.5), yaw 90 degrees (author's decision, 2026-09-24).
 2. Final audit: done (see above).
@@ -58,10 +72,10 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
    **Not bitwise identical**: three identical runs follow the same path (Hausdorff 5.5 to
    10.5 cm) but differ in timing (mission start is a wall timer; planner and command timers
    run on the simulation clock with start-up-dependent phase; actuation noise is drawn per
-   message). Re-measure with `compare_runs` before quoting. Wall time is about 2 to 3 min
-   per run.
-5. Campaign manifest locking every input by path and hash; then the campaign, seed by seed,
-   with a disk guard and keep-awake (laptop lid open).
+   message). Measured by resampling `ground_truth_pose.csv` on time since the first
+   command and by path Hausdorff distance; re-measure before quoting. Wall time is about 2
+   to 3 min per run.
+5. Campaign: done (see Current state).
 6. Figures: rebuild from `logs/thesis/`; `make_camera_views.py` must read through
    `pipeline/dataset.py`; maps draw the collision scene from the SDF (the zones omit the
    five loose objects).
@@ -73,6 +87,11 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
    must be regenerated from v8; `papers/Thesis/TODO.md` still describes the rejected v7 plan.
 
 ## Operating lessons
+
+- Never commit while a campaign or check run is active: the runner freezes the whole-repo
+  HEAD and aborts the seed on any commit (it happened once, 2026-09-24 03:02).
+- The runner can survive SIGINT during a launch; stop it with SIGTERM, then stop any
+  orphaned `ign gazebo`.
 
 - The laptop lid stays open: after a sleep the capture ignores SIGTERM and needs `kill -9`.
 - Never `pkill -f PATTERN` with the pattern in your own command line; use `[p]attern`.

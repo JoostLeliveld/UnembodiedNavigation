@@ -103,6 +103,8 @@ def run_row(task: str, condition: str, seed: int, entry: dict | None, region) ->
                     "goal_distance" if stopped else entry["outcome"]),
         "collision": int(collision),
         "collision_stamp_s": (score["first_exit"] or {}).get("stamp_s", ""),
+        "collision_x": (score["first_exit"] or {}).get("x", ""),
+        "collision_y": (score["first_exit"] or {}).get("y", ""),
         "final_goal_distance_m": goal_distance,
         "belief_error_m": float(summary["mean_belief_error_gt_after_first_cmd_m"]),
         "belief_sigma_major_m": mean_after(run / "experiment.csv", "state_sigma_major_m", first_cmd),
@@ -183,16 +185,17 @@ def plot_trajectories(rows: list[dict], task_names: list[str]) -> None:
                 poses = np.array([p[1:3] for p in read_poses(REPO / r["run_dir"] / "ground_truth_pose.csv")])
                 ax.plot(poses[:, 0], poses[:, 1], "-" if r["state"] == "intact" else "--",
                         color=colours[model], lw=1.2, alpha=0.8)
-                if r["collision"]:
-                    ax.plot(*poses[-1], "x", color="red", ms=10, mew=2)
+                if r["collision"]:  # where the footprint first left the driveable region
+                    ax.plot(r["collision_x"], r["collision_y"], "x", color="red", ms=10, mew=2, zorder=5)
             cells = [r for r in rows if r["task"] == task and r["model"] == model]
             wins = {s: sum(r.get("success", 0) for r in cells if r["state"] == s) for s in STATES}
             ax.set_title(f"{task.replace('thesis10_', '')}\n{model}: success intact {wins['intact']}/3, "
                          f"removal {wins['removal']}/3", fontsize=9)
             ax.set_aspect("equal"); ax.set_xlim(-12, 12); ax.set_ylim(-10, 10)
             ax.set_xticks([]); ax.set_yticks([])
-    fig.suptitle("Campaign true paths: intact (solid), camera removed (dashed), 3 seeds each", fontsize=12)
-    fig.tight_layout()
+    fig.suptitle("Campaign true paths: intact (solid), camera removed (dashed), 3 seeds each; "
+                 "x = first exit from the driveable region", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.985))
     fig.savefig(OUT / "trajectories.png", dpi=110)
     plt.close(fig)
 
@@ -215,7 +218,8 @@ def main() -> int:
                     if score:
                         scores[row["run_dir"]] = score
     fields = ["task", "condition", "model", "state", "seed", "outcome", "completion_reason", "route",
-              "success", "failure", "collision", "collision_stamp_s", *METRICS[1:], "run_dir"]
+              "success", "failure", "collision", "collision_stamp_s", "collision_x", "collision_y",
+              *METRICS[1:], "run_dir"]
     with (OUT / "runs.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
