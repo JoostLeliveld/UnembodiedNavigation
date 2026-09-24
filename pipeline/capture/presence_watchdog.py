@@ -56,7 +56,7 @@ def main() -> int:
                     print(f"[{time.strftime('%H:%M:%S')}] robot absent at {len(run)} positions in a row "
                           f"(session {session[:8]}, pose {pose}); killing the capture", flush=True)
                     # SIGKILL: after a laptop sleep the capture ignored SIGTERM and kept writing.
-                    subprocess.run(["pkill", "-9", "-f", "[c]apture_bbox_grid.py"], check=False)
+                    subprocess.run(["pkill", "-9", "-f", "[c]apture_positions.py"], check=False)
         time.sleep(10)
 
 

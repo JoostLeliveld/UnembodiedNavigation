@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The reference-position dataset (v8): one loader for every pipeline stage.
+"""The reference-position dataset (v9): one loader for every pipeline stage.
 
-v8 is an INDEX over the capture passes, not a copy. Its rows are
+v9 is an INDEX over the capture passes, not a copy. Its rows are
 
 * every ok row of the v5 capture, which ran in two passes over one plan
   (`capture_poses_v5.json`): part 1, and part 2 for the poses part 1 never reached or lost.
@@ -23,8 +23,15 @@ top-level included forklift, pallets, bin and pallet jack). This removes the 12 
 positions whose 46 poses were planned without those five objects; no v5, repair or
 supplement pose overlaps an object.
 
-Every added position takes the role of its nearest v5 position (none borders final_audit,
-so the sealed audit set is the v5 one) and sits after the v5 plan in `plan_pose_index`.
+* the fresh, spatially balanced final audit of v9 (keys `Vnnnn`, planned by
+  `capture/plan_rebalance.py`).
+
+Roles (v9). Every position's role comes from `captures/v9/partition_v9.csv`, written by
+`capture/plan_rebalance.py`: D_dev and D_R are spread over 2 x 2 m strata in proportion to
+the area the robot can occupy, the rest of the captured positions are D_mu, and the final
+audit is the fresh v9 capture. The role a position had in v8 is kept as `v8_role`
+(v5 plan role, or the nearest v5 role for an added v8 position). Added positions sit after
+the v5 plan in `plan_pose_index`.
 
 Presence check: a pose where at least two cameras should see the robot but none does is
 legitimate at one position (racks can hide all its headings), but such a run spanning three
@@ -45,6 +52,8 @@ REPO = Path(__file__).resolve().parents[1]
 CAPTURES = REPO / "logs/thesis/captures"
 V5 = CAPTURES / "v5"
 V8 = CAPTURES / "v8"
+V9 = CAPTURES / "v9"
+PARTITION = V9 / "partition_v9.csv"
 
 V5_PLAN = V5 / "capture_poses_v5.json"
 V5_POSITIONS = V5 / "capture_positions_v5.csv"
@@ -60,6 +69,8 @@ EXTENSIONS = (
      V5_PLAN_POSES),
     ("topup", V8 / "topup", V8 / "capture_poses_v8_topup.json",
      V5_PLAN_POSES + 48),
+    ("audit_v9", V9 / "audit", V9 / "capture_poses_v9.json",
+     V5_PLAN_POSES + 48 + 200),
 )
 # repair passes in order; a later pass overrides an earlier one for the plan poses it holds
 REPAIRS = (
@@ -138,18 +149,18 @@ def _nearest_v5_role() -> Callable[[float, float], str]:
     return role
 
 
-def _extension_rows(only_ok: bool) -> list[dict]:
+def _extension_rows(only_ok: bool, v8_only: bool = False) -> list[dict]:
     role_of = _nearest_v5_role()
     out = []
     for name, directory, pose_file, offset in EXTENSIONS:
+        if v8_only and name == "audit_v9":
+            continue
         poses = _load_json(pose_file)
         for row in _index_rows(directory, only_ok):
             i = int(row["pose_id"])
             p = poses[i]
             _check_pose(name, row, p)
-            role = role_of(p["x"], p["y"])
-            if role == "final_audit":
-                raise RuntimeError(f"{name} position {p['position_key']} borders final_audit")
+            role = "none" if name == "audit_v9" else role_of(p["x"], p["y"])
             row = dict(row)
             row.update(_DEFAULTS)
             row.update({"capture_source": name, "position_key": p["position_key"],
@@ -233,13 +244,14 @@ def _check_unique(rows: list[dict]) -> None:
         seen[k] = r["capture_source"]
 
 
-def load_rows(*, only_ok: bool = True) -> list[dict]:
+def load_rows(*, only_ok: bool = True, v8_only: bool = False) -> list[dict]:
     """Every dataset row, keyed onto the plan, with capture_source, position_key, yaw_idx,
-    plan_pose_index and the role (`stratum`) attached."""
+    plan_pose_index and the role (`stratum`) attached. `v8_only` returns the v8 index with
+    its v8 roles (what `capture/plan_rebalance.py` plans from)."""
     absent = set(_load_json(ABSENT_LIST)["plan_pose_indices"])
     rows = [r for r in _v5_rows(only_ok)
             if not (r["capture_source"] == "part1" and int(r["plan_pose_index"]) in absent)]
-    rows += _extension_rows(only_ok) + _repair_rows(only_ok)
+    rows += _extension_rows(only_ok, v8_only) + _repair_rows(only_ok)
     inside = positions_inside_objects(rows)
     rows = [r for r in rows if r["position_key"] not in inside]
     rejected = _presence_rejects(rows)
@@ -247,6 +259,20 @@ def load_rows(*, only_ok: bool = True) -> list[dict]:
         raise RuntimeError(f"{len(rejected)} poses lie in robot-absent runs; re-capture them "
                            "before using the dataset")
     _check_unique(rows)
+    return rows if v8_only else _apply_partition(rows)
+
+
+def _apply_partition(rows: list[dict]) -> list[dict]:
+    """Set every row's role from the v9 partition; keep the v8 role for provenance."""
+    with PARTITION.open(newline="", encoding="utf-8") as handle:
+        role = {r["position_key"]: r["role"] for r in csv.DictReader(handle)}
+    present = {r["position_key"] for r in rows}
+    if present - set(role) or set(role) - present:
+        raise RuntimeError(f"v9 partition and captured positions differ: "
+                           f"{len(present - set(role))} unassigned, {len(set(role) - present)} missing")
+    for r in rows:
+        r["v8_role"] = r["stratum"]
+        r["stratum"] = role[r["position_key"]]
     return rows
 
 

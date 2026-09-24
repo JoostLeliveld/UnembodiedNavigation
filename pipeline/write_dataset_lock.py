@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""(Re)write the v8 campaign lock from the v8 index: roles, counts and source hashes.
+"""(Re)write the dataset lock (v9) from the index: roles, counts and source hashes.
 
 The index itself (dataset.load_rows) refuses any robot-absent run, so a
 lock is only written for a dataset that passed the presence check.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from pipeline import dataset as v8  # noqa: E402
+from pipeline import dataset as ds  # noqa: E402
 
 HERE = REPO / "pipeline"
 LOCK = HERE / "dataset_lock.json"
@@ -36,7 +36,7 @@ def rel(path: Path) -> str:
 
 
 def main() -> int:
-    rows = v8.load_rows()
+    rows = ds.load_rows()
     work = [r for r in rows if r["stratum"] in ("D_mu", "D_R", "D_dev")]
     audit = [r for r in rows if r["stratum"] == "final_audit"]
     positions: dict[str, dict] = {}
@@ -44,9 +44,9 @@ def main() -> int:
         p = positions.setdefault(r["position_key"], {
             "position_key": r["position_key"], "x": round(float(r["robot_x"]), 4),
             "y": round(float(r["robot_y"]), 4), "role": r["stratum"],
-            "source": r["capture_source"], "camera_opportunities": 0})
+            "source": r["capture_source"], "v8_role": r["v8_role"], "camera_opportunities": 0})
         p["camera_opportunities"] += 1
-    table = f"{CAPTURES}/v8/capture_positions_v8.csv"
+    table = f"{CAPTURES}/v9/capture_positions_v9.csv"
     with (REPO / table).open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(next(iter(positions.values()))))
         writer.writeheader()
@@ -58,8 +58,8 @@ def main() -> int:
     lock = copy.deepcopy(json.loads(LOCK.read_text()))
     lock.pop("derived_from", None)
     lock.update({
-        "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V8", "status": "locked_before_refit",
-        "campaign_root": ROOT, "amendment": "docs/METHOD.md, Amendment 2026-09-23",
+        "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V9", "status": "locked_before_refit",
+        "campaign_root": ROOT, "amendment": "docs/METHOD.md, Amendment 2026-09-24 (v9 balanced split)",
         "audit_command": "python3 pipeline/audit_dataset.py",
     })
     lock["detector"]["checkpoint"] = CHECKPOINT
@@ -69,18 +69,24 @@ def main() -> int:
         "loader": "pipeline/dataset.py", "loader_sha256": sha("pipeline/dataset.py"),
         "positions": table, "positions_sha256": sha(table),
         "topup_rule": "pipeline/capture/plan_topup.py",
-        "robot_absent_list": rel(v8.ABSENT_LIST), "robot_absent_list_sha256": sha(rel(v8.ABSENT_LIST)),
+        "partition_rule": "pipeline/capture/plan_rebalance.py",
+        "partition_rule_sha256": sha("pipeline/capture/plan_rebalance.py"),
+        "partition": rel(ds.PARTITION), "partition_sha256": sha(rel(ds.PARTITION)),
+        "robot_absent_list": rel(ds.ABSENT_LIST), "robot_absent_list_sha256": sha(rel(ds.ABSENT_LIST)),
         "capture_passes": {
             name: {"capture_index": rel(directory / "capture_index.csv"),
                    "capture_index_sha256": sha(rel(directory / "capture_index.csv")),
                    "pose_file": rel(poses), "pose_file_sha256": sha(rel(poses))}
-            for name, directory, poses in v8.SOURCES},
+            for name, directory, poses in ds.SOURCES},
         "position_count": len(positions), "expected_camera_opportunities": len(rows),
         "expected_pose_batches": len(rows) // 5,
     }
     lock["partition"]["roles"] = dict(sorted(roles.items()))
-    lock["partition"]["added_position_rule"] = (
-        "each added position takes the role of its nearest v5 position; none borders final_audit")
+    lock["partition"].pop("added_position_rule", None)
+    lock["partition"]["assignment"] = (
+        "roles from captures/v9/partition_v9.csv (capture/plan_rebalance.py): D_dev and D_R spread "
+        "over 2 x 2 m strata in proportion to robot-valid area, the rest D_mu, final_audit the "
+        "fresh v9 capture; no captured position is dropped")
     lock["opportunity_accounting"].update({
         "expected_working_opportunities": len(work),
         "expected_working_unique_images": len({r["image_sha1"] for r in work}),

@@ -558,3 +558,36 @@ The design is locked by test.
 
 Detector inference, gate, correction, R0/R1/R2, planning precision, final audit, route
 solving, the campaign, and every paper number, table and figure that depends on them.
+
+## Amendment 2026-09-24 (afternoon): spatially balanced split, dataset v9
+
+Decided by the author after the first campaign, when the v8 data map was reviewed.
+
+- **Why.** In v8 the southern cross-aisle (y < -5.5 m, a quarter of the site's depth) held
+  47 % of all positions and 59 % of the final audit, and camera C had 14 audit positions
+  against 90 to 120 for the others. Every held-out number therefore described mostly one
+  region. The density cap of amendment A does not change this: no evaluation cell exceeds
+  it (the audit and D_dev reach at most 6 positions per m^2), so it reweights nothing.
+- **Rule** (`pipeline/capture/plan_rebalance.py`, seeded, declared before capture, nothing
+  chosen from errors). Strata are 2 x 2 m cells over the robot-valid area (0.1 m grid
+  points where the footprint clears every object by the capture body clearance at every
+  heading); cells under 0.5 m^2 join their nearest stratum (84 strata, 167.5 m^2). The
+  final audit (150), D_dev (437) and D_R (704) are split over strata in proportion to area
+  (largest remainder), the same totals as v8. Inside a stratum the captured positions are
+  ordered by sha256(seed, key): D_dev first, then D_R, the rest D_mu. No captured position
+  is dropped (thinning was rejected, amendment G); every stratum already held its D_dev and
+  D_R quota, so no fill capture was needed.
+- **Fresh audit.** The v8 audit was opened on 2026-09-24, so no existing image can be a
+  sealed audit again. The v9 audit is 150 new positions drawn uniformly inside each
+  stratum, at least 0.15 m from every captured and detector-training position and from
+  each other (0.15 m is the capture grid spacing and the median distance of the v8 audit to
+  its nearest training position). The 150 v8 audit positions join the pool
+  (84 D_mu, 41 D_R, 25 D_dev).
+- **Unchanged.** Detector, gate, correction and covariance methods, fixed R2 constants,
+  planner, follower, tasks, seeds, goal rule and collision definition. The capture world is
+  the current world file; its images are checked pixel-identical to the v8 capture world on
+  re-captured v8 poses before the dataset audit accepts it
+  (`captures/v9/world_equivalence/`).
+- **Reruns required.** The whole chain of amendment H, from detector inference to the
+  campaign, analysis, figures and drop-ins. The v8 results are superseded, not reported
+  as final; their analysis outputs are kept as evidence of the change.
