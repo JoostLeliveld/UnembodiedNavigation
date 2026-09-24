@@ -129,6 +129,23 @@ def network_sigma(model: str, removed: str | None = None):
     return xs, ys, sigma_cm(P[keep].sum(axis=0))
 
 
+def network_information(model: str, removed: str | None = None):
+    """Half the trace of the summed camera precision, the planner-field quantity (m^-2)."""
+    xs, ys, cams, P = precision_field(model)
+    keep = [i for i, c in enumerate(cams) if c != removed]
+    return xs, ys, 0.5 * np.trace(P[keep].sum(axis=0), axis1=-2, axis2=-1)
+
+
+def information_vmax() -> float:
+    """The planner-field figure's cap: the 90th percentile of the intact spatial field."""
+    return float(np.percentile(network_information("spatial")[2], 90))
+
+
+def draw_information(ax, xs, ys, values, vmax):
+    return ax.pcolormesh(xs, ys, values, shading="nearest", cmap="viridis", vmin=0.0, vmax=vmax,
+                         zorder=2, rasterized=True)
+
+
 def draw_sigma(ax, xs, ys, sigma, norm):
     """The field over a hatched ground: hatch shows through wherever no camera supports it."""
     ax.add_patch(Rectangle((xs[0], ys[0]), xs[-1] - xs[0], ys[-1] - ys[0], fc="white",

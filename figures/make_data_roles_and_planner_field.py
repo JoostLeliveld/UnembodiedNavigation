@@ -113,10 +113,9 @@ def planner_field_construction_figure() -> None:
     vmax = float(np.percentile(fields[-1][0], 90))
 
     warehouse = layout()
-    # The first two fields are spatially constant.  Keep them visible for the
-    # comparison, but give the varying spatial field the room it needs.
-    fig = plt.figure(figsize=(7.16, 2.30), constrained_layout=True)
-    grid = fig.add_gridspec(1, 4, width_ratios=(1.0, 1.0, 2.05, 0.10))
+    # Equal panels, so the three models are compared at the same scale.
+    fig = plt.figure(figsize=(7.16, 2.05), constrained_layout=True)
+    grid = fig.add_gridspec(1, 4, width_ratios=(1.0, 1.0, 1.0, 0.05))
     axes = [fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1]),
             fig.add_subplot(grid[0, 2])]
     image = None

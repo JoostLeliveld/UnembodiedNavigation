@@ -3,8 +3,9 @@
 what the robot then does.
 
 Rows: all cameras / dropout of the task camera. Columns: global, per-camera, spatial model.
-Background: the model's own planning field as one-sigma position uncertainty (cm), the
-inverse of its summed per-camera precision; blank where no camera supports a position.
+Background: the model's own planning field, half the trace of its summed per-camera
+precision (m^-2), on the colour scale of the methodology's planner-field figure; where the
+dropped camera was the only support, the field falls to zero.
 Lines: the route the model planned (thick) and the three executed true paths (thin);
 x marks where a footprint first left the driveable region, o where a failed run stopped without leaving it.
 
@@ -16,7 +17,6 @@ import csv
 import sys
 
 import numpy as np
-from matplotlib.colors import LogNorm
 
 import paper as P
 from pipeline.score_collisions import read_poses
@@ -32,15 +32,15 @@ def runs():
 def main():
     task = next(t for t in P.tasks() if t["name"] == TASK)
     rows = runs()
-    norm = LogNorm(*P.SIGMA_RANGE_CM)
+    vmax = P.information_vmax()
     fig, axes = P.plt.subplots(2, 3, figsize=(P.TEXT, 3.95), gridspec_kw=dict(wspace=0.03, hspace=0.12))
     mesh = None
     for i, state in enumerate(("intact", "removal")):
         removed = task["removed"] if state == "removal" else None
         for j, model in enumerate(P.MODELS):
             ax = axes[i, j]
-            xs, ys, sigma = P.network_sigma(model, removed)
-            mesh = P.draw_sigma(ax, xs, ys, sigma, norm)
+            xs, ys, info = P.network_information(model, removed)
+            mesh = P.draw_information(ax, xs, ys, info, vmax)
             P.draw_map(ax, removed=removed, camera_labels=(j == 0))
             colour = P.MODEL_COLOUR[model]
             for r in rows:
@@ -69,11 +69,9 @@ def main():
                 ax.set_title(P.MODEL_LABEL[model], color=colour, fontweight="bold", pad=2)
         axes[i, 0].text(-0.03, 0.5, "all cameras" if state == "intact" else f"camera {task['removed'][-1]} dropout",
                         transform=axes[i, 0].transAxes, rotation=90, ha="right", va="center", fontsize=8)
-    cbar = fig.colorbar(mesh, ax=axes, shrink=0.72, pad=0.01, aspect=28)
-    cbar.set_label("planned position uncertainty, one sigma (cm)\nhatched: no camera support")
+    cbar = fig.colorbar(mesh, ax=axes, shrink=0.72, pad=0.01, aspect=28, extend="max")
+    cbar.set_label(r"$\frac{1}{2}\mathrm{tr}\sum_i\Lambda_{m,i}(p)$ (m$^{-2}$)")
     cbar.outline.set_linewidth(0.4)
-    cbar.set_ticks([2, 5, 10, 20, 50]); cbar.set_ticklabels(["2", "5", "10", "20", "50"])
-    cbar.minorticks_off()
     # camera letter plus task name: the letter alone collides for the two camera-E tasks
     P.save(fig, f"removal_mechanism_{TASK.removeprefix('thesis10_camera_')}")
 
