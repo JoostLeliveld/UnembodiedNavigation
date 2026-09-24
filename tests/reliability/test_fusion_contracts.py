@@ -166,3 +166,16 @@ def test_wire_batch_rejects_duplicate_sources_before_filter_side_effects():
     payload["observations"] *= 2
     with pytest.raises(ContractValidationError, match="duplicate"):
         map_observations_from_json(json.dumps(payload))
+
+
+def test_an_infinite_gate_fuses_every_camera():
+    batch = [reading("camera_A", (0., 0.)), reading("camera_B", (2., 0.)), reading("camera_C", (0.1, 0.))]
+    result = gated_measurement_fusion_2d(batch, disagreement_gate_m=float("inf"), rule="independent")
+    assert set(result.accepted_camera_ids) == {"camera_A", "camera_B", "camera_C"}
+    assert result.rejected_camera_ids == ()
+
+
+@pytest.mark.parametrize("gate", [0., -1., float("nan")])
+def test_a_nonpositive_gate_is_refused(gate):
+    with pytest.raises(ContractValidationError, match="disagreement_gate_m"):
+        gated_measurement_fusion_2d([reading()], disagreement_gate_m=gate, rule="independent")

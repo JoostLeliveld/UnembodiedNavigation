@@ -97,7 +97,7 @@ manager_bootstrap_min_cameras: 2
 manager_bootstrap_max_disagreement_m: 0.3
 manager_use_task_start_as_bootstrap_prior: true
 manager_bootstrap_prior_counts_as_support: true
-manager_fusion_disagreement_gate_m: 0.6
+manager_fusion_disagreement_gate_m: 0.0   # no median gate (METHOD amendment 2026-09-24 night)
 manager_fusion_max_timestamp_spread_s: 0.05
 manager_correction_timestamp_compensation: false
 manager_correction_propagation_drift_std: 0.05

@@ -941,7 +941,9 @@ class CameraManagerNode(Node):
         self.fused_correction_pub = self.create_publisher(
             String, str(self.get_parameter("fused_correction_topic").value), 10
         )
-        self.fusion_disagreement_gate_m = float(self.get_parameter("fusion_disagreement_gate_m").value)
+        # 0 disables the median gate (METHOD amendment 2026-09-24 night): fuse every camera.
+        gate = float(self.get_parameter("fusion_disagreement_gate_m").value)
+        self.fusion_disagreement_gate_m = math.inf if gate == 0.0 else gate
         self._measurement_model_status_by_camera: dict[str, str] = {}
         # What the detector itself said about each reading, kept beside the reading so the
         # log can ask whether the detector's own confidence predicts how wrong it was.

@@ -76,8 +76,9 @@ def gated_measurement_fusion_2d(
     _validate_rule(rule, camera_positions_m)
     observations = camera_measurement_batch(observations)
     gate = float(disagreement_gate_m)
-    if not math.isfinite(gate) or gate <= 0.0:
-        raise ContractValidationError("disagreement_gate_m must be finite and positive")
+    # math.inf disables the median gate: every admitted camera is fused.
+    if math.isnan(gate) or gate <= 0.0:
+        raise ContractValidationError("disagreement_gate_m must be positive (math.inf: no gate)")
     centre = tuple(median(obs.xy_m[axis] for obs in observations) for axis in (0, 1))
     residuals = {obs.camera_id: math.hypot(obs.xy_m[0]-centre[0], obs.xy_m[1]-centre[1])
                  for obs in observations}

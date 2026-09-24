@@ -674,3 +674,8 @@ Decided by the author, frozen before any v10 image is captured.
   chosen from driveable space and existing coverage alone, independent of the view classes).
   The hard-view top-up is redesigned from **measured** view classes (segmentation masks of the
   existing captures) and frozen by a further dated note before it is captured.
+- **Fusion median gate removed (author, 2026-09-24 night).** `manager_fusion_disagreement_gate_m`
+  is 0 in both campaign templates, which the camera manager reads as "no median gate": every
+  admitted camera in a synchronous batch is fused in information form. The former 0.6 m gate
+  was never derived and did not change a fusion decision in the v8 campaign. Outliers remain
+  subject to the estimator's NIS gate on the fused measurement.
