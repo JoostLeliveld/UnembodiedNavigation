@@ -1868,6 +1868,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 # timeout also catches genuinely wedged runtime barriers once active.
                 'barrier_timeout_s': 180.0,
             }],
+            on_exit=[Shutdown(reason='lockstep scheduler exited')],
         )
 
     return {

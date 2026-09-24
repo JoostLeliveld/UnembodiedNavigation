@@ -1,4 +1,5 @@
 #include <ignition/msgs/boolean.pb.h>
+#include <ignition/msgs/world_stats.pb.h>
 #include <ignition/msgs/world_control.pb.h>
 #include <ignition/transport/Node.hh>
 
@@ -11,6 +12,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <optional>
 #include <regex>
@@ -59,6 +61,8 @@ public:
       "/cmd_vel", rclcpp::QoS(100),
       [this](const geometry_msgs::msg::Twist &) { ++commandCount_; cv_.notify_all(); });
 
+    gzNode_.Subscribe("/world/" + worldName_ + "/stats", &LockstepScheduler::OnStats, this);
+
     worker_ = std::thread([this]() { Run(); });
   }
 
@@ -96,6 +100,16 @@ private:
     cv_.notify_all();
   }
 
+  void OnStats(const ignition::msgs::WorldStatistics &stats)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    statsSimNs_ = static_cast<std::int64_t>(stats.sim_time().sec()) * 1000000000LL +
+                  stats.sim_time().nsec();
+    statsPaused_ = stats.paused();
+    ++statsCount_;
+    cv_.notify_all();
+  }
+
   template<typename Predicate>
   bool WaitFor(Predicate predicate, const std::string &barrier)
   {
@@ -103,9 +117,12 @@ private:
     const bool ready = cv_.wait_for(
       lock, std::chrono::duration<double>(timeoutS_),
       [this, &predicate]() { return stopping_ || predicate(); });
-    if (!ready || stopping_) {
-      RCLCPP_ERROR(get_logger(), "lockstep barrier timed out: %s", barrier.c_str());
-      return false;
+    if (stopping_) return false;
+    if (!ready) {
+      // A wedged barrier leaves the world paused forever; end the run loudly
+      // instead (the launch shuts the experiment down when this process exits).
+      RCLCPP_FATAL(get_logger(), "lockstep barrier timed out: %s", barrier.c_str());
+      std::_Exit(3);
     }
     return true;
   }
@@ -130,12 +147,46 @@ private:
       RCLCPP_ERROR(get_logger(), "failed to pause /world/%s", worldName_.c_str());
       return;
     }
-    RCLCPP_INFO(get_logger(), "lockstep active: %d iterations/control step, camera every %d steps",
-      stepIterations_, cameraEveryControlSteps_);
+    // The pause lands at an arbitrary simulation time. Step once to the next camera
+    // instant so that every camera frame falls at the end of a camera control step
+    // (1 ms physics: one iteration is 1 ms), whatever the wall-clock start-up took.
+    const std::uint64_t pausedStats = statsCount_.load();
+    if (!WaitFor([this, pausedStats]() { return statsCount_ > pausedStats + 1 && statsPaused_; },
+                 "paused world statistics")) return;
+    std::int64_t pausedNs;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      pausedNs = statsSimNs_;
+    }
+    const std::int64_t cameraPeriodNs =
+      static_cast<std::int64_t>(stepIterations_) * cameraEveryControlSteps_ * 1000000LL;
+    const std::int64_t alignedNs = ((pausedNs + cameraPeriodNs - 1) / cameraPeriodNs) * cameraPeriodNs;
+    const std::uint64_t alignIterations =
+      static_cast<std::uint64_t>((alignedNs - pausedNs + 500000LL) / 1000000LL);
+    std::optional<std::string> pendingManagerBatch;
+    if (alignIterations > 0) {
+      const auto odomBefore = odomCount_.load();
+      const auto detectorBefore = detectorPublishedCount_.load();
+      ignition::msgs::WorldControl align;
+      align.set_pause(true);
+      align.set_multi_step(alignIterations);
+      if (!Control(align)) {
+        RCLCPP_ERROR(get_logger(), "Gazebo alignment step request failed");
+        return;
+      }
+      if (!WaitFor([this, odomBefore]() { return odomCount_ > odomBefore; }, "odometry")) return;
+      if (!WaitFor([this, detectorBefore]() { return detectorPublishedCount_ > detectorBefore; },
+                   "detector publication at the aligned camera instant")) return;
+      std::lock_guard<std::mutex> lock(mutex_);
+      pendingManagerBatch = lastDetectorBatch_;
+    }
+    RCLCPP_INFO(get_logger(),
+      "lockstep active: %d iterations/control step, camera every %d steps; paused at %.3f s, "
+      "aligned to %.3f s with %lu iterations",
+      stepIterations_, cameraEveryControlSteps_, pausedNs * 1e-9, alignedNs * 1e-9, alignIterations);
 
     const auto wallStart = std::chrono::steady_clock::now();
     std::uint64_t controlStep = 0;
-    std::optional<std::string> pendingManagerBatch;
     while (rclcpp::ok() && !stopping_ &&
            (maxControlSteps_ <= 0 || controlStep < static_cast<std::uint64_t>(maxControlSteps_))) {
       if (pendingManagerBatch) {
@@ -194,6 +245,9 @@ private:
   std::atomic<std::uint64_t> detectorPublishedCount_{0};
   std::string lastDetectorBatch_;
   std::string lastManagerBatch_;
+  std::int64_t statsSimNs_{0};
+  bool statsPaused_{false};
+  std::atomic<std::uint64_t> statsCount_{0};
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr detectorSub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr managerSub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;

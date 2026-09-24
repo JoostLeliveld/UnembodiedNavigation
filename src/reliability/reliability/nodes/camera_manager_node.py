@@ -1247,9 +1247,13 @@ class CameraManagerNode(Node):
             self.create_subscription(String, topic, self._observation_callback(camera_id), 10)
 
         rate = max(0.1, float(self.get_parameter("decision_rate_hz").value))
-        self.create_timer(1.0 / rate, self._decide)
         # Expiry must continue when simulation time pauses or all publishers vanish.
         self._batch_wall_clock = Clock(clock_type=ClockType.STEADY_TIME)
+        # Decisions too: the lockstep scheduler holds the simulation clock until it
+        # sees the decision for the batch it just stepped, so a simulation-clock
+        # timer would never fire. Each completed batch is still decided exactly once,
+        # and under lockstep at the paused simulation time, independent of the phase.
+        self.create_timer(1.0 / rate, self._decide, clock=self._batch_wall_clock)
         self.create_timer(0.25, self._expire_source_batches, clock=self._batch_wall_clock)
 
     def _publish_batch_outcome(self, event) -> None:
