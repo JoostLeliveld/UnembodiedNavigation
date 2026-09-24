@@ -19,8 +19,9 @@ sys.path[:0] = [str(ROOT / "src/planning"), str(ROOT / "src/unav_common")]
 from planning.core.camera_network import CameraNetworkModel  # noqa: E402
 from style import layout  # noqa: E402
 PAPER_FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
-POSES = ROOT / "logs/thesis/captures/v5/capture_poses_v5.json"
-PLANNING_DIR = ROOT / "logs/track_a_draft/planning_precision"
+INFERENCE_RECORDS = ROOT / "logs/thesis/fits/detector_inference/records.jsonl"
+FINAL_AUDIT = ROOT / "logs/thesis/final_audit/evaluated.jsonl"
+PLANNING_DIR = ROOT / "logs/thesis/fits/planning_precision"
 PLANNING_ARTIFACT = PLANNING_DIR / "m2_planning_precision.npz"
 PLANNING_MODELS = (
     ("m0_planning_precision.npz", r"(a) global $R_0$"),
@@ -44,15 +45,34 @@ ROLE_LABELS = {
 }
 CAMERAS = tuple(f"camera_{letter}" for letter in "ABCDE")
 def load_positions() -> list[dict]:
-    poses = json.loads(POSES.read_text(encoding="utf-8"))
-    unique: dict[int, dict] = {}
-    for pose in poses:
-        position_id = int(pose["position_id"])
-        previous = unique.setdefault(position_id, pose)
-        if previous["stratum"] != pose["stratum"]:
-            raise RuntimeError(f"position {position_id} crosses data roles")
-    if len(unique) != 2569:
-        raise RuntimeError(f"expected 2569 positions, found {len(unique)}")
+    """Read the sealed data roles used by the final fits and audit."""
+    unique: dict[str, dict] = {}
+    with INFERENCE_RECORDS.open(encoding="utf-8") as handle:
+        for line in handle:
+            record = json.loads(line)
+            key = str(record["position_key"])
+            candidate = {
+                "position_key": key,
+                "x": float(record["robot_x"]),
+                "y": float(record["robot_y"]),
+                "stratum": str(record["stratum"]),
+            }
+            previous = unique.setdefault(key, candidate)
+            if previous != candidate:
+                raise RuntimeError(f"inconsistent records for position {key}")
+    with FINAL_AUDIT.open(encoding="utf-8") as handle:
+        for line in handle:
+            record = json.loads(line)
+            key = str(record["position_key"])
+            x, y = map(float, record["truth_xy_m"])
+            candidate = {"position_key": key, "x": x, "y": y, "stratum": "final_audit"}
+            previous = unique.setdefault(key, candidate)
+            if previous != candidate:
+                raise RuntimeError(f"position {key} appears in both fitting and final-audit data")
+    counts = {role: sum(p["stratum"] == role for p in unique.values()) for role in ROLE_COLOURS}
+    expected = {"D_mu": 1328, "D_R": 704, "D_dev": 437, "final_audit": 150}
+    if counts != expected:
+        raise RuntimeError(f"unexpected final data-role counts: {counts}")
     return [unique[key] for key in sorted(unique)]
 
 
