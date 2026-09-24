@@ -116,7 +116,6 @@ class UnicyclePlannerBase:
         control_weight,
         process_noise_xy,
         process_noise_theta,
-        obs_noise_uv,
         goal_sigma_uv,
         risk_weight_obs,
         ambiguity_weight,
@@ -279,7 +278,6 @@ class UnicyclePlannerBase:
                 RuntimeWarning, stacklevel=2)
         self.process_noise_xy = float(process_noise_xy)
         self.process_noise_theta = float(process_noise_theta)
-        self.obs_noise_uv = float(obs_noise_uv)
 
         self.goal_sigma_uv = float(goal_sigma_uv)
         if self.goal_sigma_uv <= 0.0:
