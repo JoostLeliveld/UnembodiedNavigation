@@ -44,8 +44,9 @@ MODEL_COLOUR = {"global": "#0072B2", "per_camera": "#E69F00", "spatial": "#009E7
 COLLISION, STUCK, SHORT = "#D55E00", "#CC79A7", "#a6a6a6"
 INK, MUTED, RACK, RACK_EDGE = "#1a1a1a", "#6b6b6b", "#e4e2dc", "#bdbab2"
 from matplotlib.colors import ListedColormap  # noqa: E402
-# Uncertainty is a magnitude drawn in neutral greys, so the coloured routes stay readable.
-SIGMA_CMAP = ListedColormap(plt.get_cmap("Greys")(np.linspace(0.07, 0.92, 256)), name="sigma")
+# Reversed viridis, so low uncertainty (high information) is yellow as in the methodology's
+# planner-field figure; routes carry a dark halo to stay readable on its yellow end.
+SIGMA_CMAP = ListedColormap(plt.get_cmap("viridis_r")(np.linspace(0.0, 1.0, 256)), name="sigma")
 SIGMA_RANGE_CM = (1.5, 60.0)
 NO_SUPPORT_CM = 100.0
 
@@ -129,7 +130,9 @@ def network_sigma(model: str, removed: str | None = None):
 
 
 def draw_sigma(ax, xs, ys, sigma, norm):
-    """Draw the finite camera-network uncertainty field; masked cells remain blank."""
+    """The field over a hatched ground: hatch shows through wherever no camera supports it."""
+    ax.add_patch(Rectangle((xs[0], ys[0]), xs[-1] - xs[0], ys[-1] - ys[0], fc="white",
+                           ec="#d9a38a", hatch="////", lw=0, zorder=1.5))
     return ax.pcolormesh(xs, ys, sigma, shading="nearest", cmap=SIGMA_CMAP, norm=norm,
                          zorder=2, rasterized=True)
 

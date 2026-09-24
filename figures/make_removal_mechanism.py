@@ -3,7 +3,7 @@
 what the robot then does.
 
 Rows: all cameras / dropout of the task camera. Columns: global, per-camera, spatial model.
-Background: the camera-network field as one-sigma position uncertainty (cm), the
+Background: the model's own planning field as one-sigma position uncertainty (cm), the
 inverse of its summed per-camera precision; blank where no camera supports a position.
 Lines: the route the model planned (thick) and the three executed true paths (thin);
 x marks where a footprint first left the driveable region, o where a failed run stopped without leaving it.
@@ -47,15 +47,21 @@ def main():
                 if r["model"] != model or r["state"] != state:
                     continue
                 poses = np.array([p[1:3] for p in read_poses(P.REPO / r["run_dir"] / "ground_truth_pose.csv")])
-                ax.plot(poses[:, 0], poses[:, 1], color="white", lw=1.6, zorder=5, alpha=0.9)
+                ax.plot(poses[:, 0], poses[:, 1], color=P.INK, lw=1.7, zorder=5, alpha=0.9)
                 ax.plot(poses[:, 0], poses[:, 1], color=colour, lw=0.7, zorder=6)
                 if r["collision"] == "1":
                     ax.plot(float(r["collision_x"]), float(r["collision_y"]), "x", color=P.COLLISION,
                             ms=6, mew=1.4, zorder=10)
                 elif r["success"] != "1":
                     ax.plot(poses[-1, 0], poses[-1, 1], "o", mfc="none", mec=P.STUCK, ms=5, mew=1.2, zorder=10)
+            wins = sum(r["success"] == "1" for r in rows if r["model"] == model and r["state"] == state)
+            ax.text(0.99, 0.995, f"{wins}/3 succeeded", transform=ax.transAxes, ha="right", va="top",
+                    fontsize=7.5, color=P.INK, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=12)
             route = P.planned_route(TASK, f"{model}_{state}")
-            ax.plot(route[:, 0], route[:, 1], color=colour, lw=2.2, alpha=0.35, zorder=4,
+            ax.plot(route[:, 0], route[:, 1], color="white", lw=3.4, alpha=0.8, zorder=3.9,
+                    solid_capstyle="round")
+            ax.plot(route[:, 0], route[:, 1], color=colour, lw=2.2, alpha=0.6, zorder=4,
                     solid_capstyle="round")
             ax.plot(task["start"]["x"], task["start"]["y"], "o", ms=4, color=P.INK, zorder=11)
             ax.plot(task["goal"]["x"], task["goal"]["y"], "*", ms=8, color="white", mec=P.INK, mew=0.6, zorder=11)
@@ -64,7 +70,7 @@ def main():
         axes[i, 0].text(-0.03, 0.5, "all cameras" if state == "intact" else f"camera {task['removed'][-1]} dropout",
                         transform=axes[i, 0].transAxes, rotation=90, ha="right", va="center", fontsize=8)
     cbar = fig.colorbar(mesh, ax=axes, shrink=0.72, pad=0.01, aspect=28)
-    cbar.set_label("camera-network uncertainty, one sigma (cm)")
+    cbar.set_label("planned position uncertainty, one sigma (cm)\nhatched: no camera support")
     cbar.outline.set_linewidth(0.4)
     cbar.set_ticks([2, 5, 10, 20, 50]); cbar.set_ticklabels(["2", "5", "10", "20", "50"])
     cbar.minorticks_off()
