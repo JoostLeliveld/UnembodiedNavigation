@@ -58,6 +58,17 @@ public:
     odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
       "/odom", rclcpp::QoS(100),
       [this](const nav_msgs::msg::Odometry &) { ++odomCount_; cv_.notify_all(); });
+    // After the logger's terminal stop the detector and manager go quiescent by
+    // design; perception barriers then only stall the clock that the logger's
+    // rest verification needs, so from then on the scheduler steps on odometry.
+    terminalSub_ = create_subscription<std_msgs::msg::String>(
+      "/experiment/terminal_stop_request",
+      rclcpp::QoS(16).reliable().transient_local(),
+      [this](const std_msgs::msg::String &) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        terminalRequested_ = true;
+        cv_.notify_all();
+      });
     commandSub_ = create_subscription<geometry_msgs::msg::Twist>(
       "/cmd_vel", rclcpp::QoS(100),
       [this](const geometry_msgs::msg::Twist &) { ++commandCount_; cv_.notify_all(); });
@@ -203,7 +214,7 @@ private:
            (maxControlSteps_ <= 0 || controlStep < static_cast<std::uint64_t>(maxControlSteps_))) {
       if (pendingManagerBatch) {
         const std::string expected = *pendingManagerBatch;
-        if (!WaitFor([this, &expected]() { return lastManagerBatch_ == expected; },
+        if (!WaitFor([this, &expected]() { return terminalRequested_ || lastManagerBatch_ == expected; },
                      "manager decision for " + expected)) return;
         pendingManagerBatch.reset();
       }
@@ -232,10 +243,10 @@ private:
 
       if (controlStep % static_cast<std::uint64_t>(cameraEveryControlSteps_) == 0) {
         if (!WaitFor([this, detectorBefore]() {
-              return detectorPublishedCount_ > detectorBefore;
+              return terminalRequested_ || detectorPublishedCount_ > detectorBefore;
             }, "detector publication")) return;
         std::lock_guard<std::mutex> lock(mutex_);
-        pendingManagerBatch = lastDetectorBatch_;
+        if (!terminalRequested_) pendingManagerBatch = lastDetectorBatch_;
       }
     }
 
@@ -262,6 +273,7 @@ private:
   std::atomic<std::uint64_t> odomCount_{0};
   std::atomic<std::uint64_t> commandCount_{0};
   bool detectorReady_{false};
+  bool terminalRequested_{false};
   std::atomic<std::uint64_t> detectorPublishedCount_{0};
   std::string lastDetectorBatch_;
   std::string lastManagerBatch_;
@@ -272,6 +284,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr managerSub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr commandSub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr terminalSub_;
 };
 
 int main(int argc, char **argv)
