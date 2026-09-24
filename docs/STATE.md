@@ -24,16 +24,17 @@ the campaign manifest. Numbers here are pointers; quote results from the named a
   (`logs/thesis/evidence/dataset_audit.json`). See METHOD amendment A.
 - **Gate**: `config/sensor_gate.yaml` (confidence and projection only). Amendment B.
 - **Fits**: final deterministic refit into `logs/thesis/fits/` (see its manifests).
-- **Final audit, routes, campaign**: not run yet.
+- **Final audit**: opened once, 2026-09-24 01:30 (`logs/thesis/final_audit/report.json`,
+  `final_audit_fusion/report.json`; protocol `logs/thesis/final_audit_protocol.json`).
+  150 positions, 3,000 opportunities, 1,633 admitted. Quote numbers from the reports.
+- **Routes, campaign**: in progress.
 - **Repo**: lean layout, one version of every artifact, tests green; tag
   `pre-lean-20260924` holds everything removed during the lean-up.
 
 ## Open items, in order
 
-1. Task B start: (-7.6, -8.5) sees only camera B at the start heading; the belief needs two
-   cameras. Proposal: move it to (-7.6, -7.5), yaw 90 degrees (cameras B, C, E), and shift
-   the first waypoint of the eastbound seeds to y = -7.5. Needs the author's decision.
-2. Final audit: `pipeline/audit_protocol.py`, `final_audit.py`, `final_audit_fusion.py`.
+1. Task B start: moved to (-7.6, -7.5), yaw 90 degrees (author's decision, 2026-09-24).
+2. Final audit: done (see above).
 3. Routes: `pipeline/campaign_configs.py`, `routes.sh`; replay every solved route through
    `ff_fb` inside the driveable region; `plot_routes.py` for review.
 4. Lockstep qualification: one route end to end; the same task and seed twice must give an

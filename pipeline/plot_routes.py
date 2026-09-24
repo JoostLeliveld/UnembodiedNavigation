@@ -36,7 +36,7 @@ CAMS = {"camera_A": (-11.45, -9.45), "camera_B": (-1.5, -9.72), "camera_C": (-6.
 
 
 def network_information(model_key: str, active: list[str]):
-    z = np.load(V8 / f"planning_precision/{model_key}_planning_precision.npz")
+    z = np.load(V8 / f"fits/planning_precision/{model_key}_planning_precision.npz")
     ids = [str(c) for c in z["camera_ids"]]
     info = sum(np.trace(z["matched_precision_m2_inv"][ids.index(c)], axis1=-2, axis2=-1)
                for c in active)
@@ -99,9 +99,9 @@ def main() -> int:
                 ax.legend(loc="lower right", fontsize=8)
     fig.suptitle("v8 offline routes: intact (solid) vs camera dropout (dashed), over the dropout-network "
                  "information of each model", fontsize=13)
-    out = V8 / "routes_overview.png"
+    out = ROUTES / "routes_overview.png"
     fig.savefig(out, dpi=110)
-    (V8 / "routes_summary.json").write_text(json.dumps(rows, indent=1))
+    (ROUTES / "routes_summary.json").write_text(json.dumps(rows, indent=1))
     print(f"{'task':34}{'model':11}{'state':8}{'route':22}{'len':>7}{'cost':>8}{'risk':>7}{'amb':>7}{'nogo':>7}{'clear':>7} changed")
     for r in rows:
         print(f"{r['task']:34}{r['model']:11}{r['state']:8}{r['route']:22}{r['length_m']:7.2f}{r['total_cost']:8.3f}"
