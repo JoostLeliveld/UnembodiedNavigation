@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Analyse the camera-removal campaign: one row per run, per-arm tables, matched differences.
 
-Reads logs/thesis/campaign/seed*/campaign_log.json (the runner's ledger) and each run's
+Reads logs/thesis/campaign/seed*/campaign_log.json (the runner's ledger; the task C rerun
+under campaign/taskC_goal_rule/seed*) and each run's
 own artifacts; writes logs/thesis/analysis/:
   runs.csv          one row per campaign cell (5 tasks x 6 conditions x 3 seeds)
   collisions.json   the offline footprint score of every run (pipeline/score_collisions.py)
@@ -206,8 +207,12 @@ def main() -> int:
     task_names = tasks()
     rows, scores = [], {}
     for seed in SEEDS:
-        path = CAMPAIGN / f"seed{seed}/campaign_log.json"
-        ledger = json.loads(path.read_text()) if path.is_file() else {}
+        ledger = {}
+        # The task C rerun (METHOD amendment 2026-09-25) has its own log root, because a
+        # resumed root must share one commit; its entries replace any older task C entries.
+        for root in (CAMPAIGN, CAMPAIGN / "taskC_goal_rule"):
+            path = root / f"seed{seed}/campaign_log.json"
+            ledger.update(json.loads(path.read_text()) if path.is_file() else {})
         for task in task_names:
             for model in MODELS:
                 for state in STATES:
