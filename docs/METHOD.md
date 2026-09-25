@@ -690,3 +690,21 @@ Decided by the author, frozen before any v10 image is captured.
   are false; the camera manager treats the belief as anchored from the start). The mission's
   `initial_belief_max_sigma_m` (0.3 m) is met by the prior, so planning starts at once. With the
   flag off the former camera bootstrap is unchanged.
+
+## Amendment 2026-09-25: task-visibility rule, task C goal moved
+
+- **Rule (author, 2026-09-25).** In the removal condition the task's start and goal must each be
+  seen by at least one active camera in at least 90% of the captured static views within 0.75 m
+  (a view counts as seen when the robot has semantic pixels in it; dataset v10 via
+  `pipeline/dataset.py`). A task that fails the rule tests a blind finish, not the camera model.
+- **Check.** All starts and goals pass except the task C goal (-3.05, 8.625), seen under removal
+  of C only by camera D, in about half the views.
+- **Change.** The task C goal moves to the first point on its own lane (x = -3.05, scanned
+  south in 0.1 m steps) that passes: (-3.05, 5.6). The immediate-east and lower-connector seeds
+  keep their shape; the northern crossing now uses the y = 6.35 lane, so it is no longer equal in
+  length to the other two. The contrast the task tests is kept: the northern route drives
+  through a region that only C covers, the other two do not.
+- **Evidence kept.** The superseded task C configs and routes are in
+  `logs/thesis/superseded_taskC_blind_goal_20260925/`, and the old task C runs are moved there
+  as evidence of the blind-finish failure mechanism. Task C alone is rerun (6 conditions x 3
+  seeds); the other four tasks' runs are unchanged.
