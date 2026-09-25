@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The reference-position dataset (v9): one loader for every pipeline stage.
+"""The reference-position dataset (v10 = v9 + the lane-grid capture): one loader for every stage.
 
 v9 is an INDEX over the capture passes, not a copy. Its rows are
 
@@ -26,7 +26,11 @@ supplement pose overlaps an object.
 * the fresh, spatially balanced final audit of v9 (keys `Vnnnn`, planned by
   `capture/plan_rebalance.py`).
 
-Roles (v9). Every position's role comes from `captures/v9/partition_v9.csv`, written by
+* the v10 lane-grid capture (keys `Lnnnn`, planned by `capture/plan_hard_views.py`), with
+  roles from `capture/partition_v10.py` inside the v9 strata.
+
+Roles (v10). `captures/v10/partition_v10.csv` is `captures/v9/partition_v9.csv` unchanged plus
+the lane positions. Every v9 position's role comes from `captures/v9/partition_v9.csv`, written by
 `capture/plan_rebalance.py`: D_dev and D_R are spread over 2 x 2 m strata in proportion to
 the area the robot can occupy, the rest of the captured positions are D_mu, and the final
 audit is the fresh v9 capture. The role a position had in v8 is kept as `v8_role`
@@ -53,7 +57,8 @@ CAPTURES = REPO / "logs/thesis/captures"
 V5 = CAPTURES / "v5"
 V8 = CAPTURES / "v8"
 V9 = CAPTURES / "v9"
-PARTITION = V9 / "partition_v9.csv"
+V10 = CAPTURES / "v10"
+PARTITION = V10 / "partition_v10.csv"
 
 V5_PLAN = V5 / "capture_poses_v5.json"
 V5_POSITIONS = V5 / "capture_positions_v5.csv"
@@ -71,6 +76,8 @@ EXTENSIONS = (
      V5_PLAN_POSES + 48),
     ("audit_v9", V9 / "audit", V9 / "capture_poses_v9.json",
      V5_PLAN_POSES + 48 + 200),
+    ("lane_v10", V10 / "lane/capture", V10 / "lane/capture_poses_v10_lane_kept.json",
+     V5_PLAN_POSES + 48 + 200 + 600),
 )
 # repair passes in order; a later pass overrides an earlier one for the plan poses it holds
 REPAIRS = (
@@ -153,14 +160,15 @@ def _extension_rows(only_ok: bool, v8_only: bool = False) -> list[dict]:
     role_of = _nearest_v5_role()
     out = []
     for name, directory, pose_file, offset in EXTENSIONS:
-        if v8_only and name == "audit_v9":
+        if v8_only and name in ("audit_v9", "lane_v10"):
             continue
         poses = _load_json(pose_file)
         for row in _index_rows(directory, only_ok):
             i = int(row["pose_id"])
             p = poses[i]
             _check_pose(name, row, p)
-            role = "none" if name == "audit_v9" else role_of(p["x"], p["y"])
+            role = ("none" if name == "audit_v9" else "unassigned" if name == "lane_v10"
+                    else role_of(p["x"], p["y"]))
             row = dict(row)
             row.update(_DEFAULTS)
             row.update({"capture_source": name, "position_key": p["position_key"],
