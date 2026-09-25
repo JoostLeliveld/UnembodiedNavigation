@@ -48,7 +48,8 @@ from unav_common.terminal_stop import (
 def _find_repo_root(start_dir: str) -> str:
     current = os.path.abspath(start_dir)
     while True:
-        if os.path.isdir(os.path.join(current, '.git')):
+        # A worktree has a .git FILE pointing at the main repository, not a directory.
+        if os.path.exists(os.path.join(current, '.git')):
             return current
         parent = os.path.dirname(current)
         if parent == current:

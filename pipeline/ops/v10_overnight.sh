@@ -97,7 +97,8 @@ print('pilot statuses', statuses)
 assert 'accepted_bootstrap' not in statuses, 'camera bootstrap still used'
 assert cfg.get('initial_belief_from_task_start') is True, 'initial prior not in the campaign config'
 assert float(m['encoder_noise_linear_slip_mean']) == 0.0, 'encoder not calibrated in the run'
-assert float(m['manager_fusion_disagreement_gate_m']) == 0.0 and ms.get('manager_assume_initial_belief_anchor') is True, 'gate or anchor wrong'
+assert float(m['manager_fusion_disagreement_gate_m']) == 0.0 and m.get('manager_assume_initial_belief_anchor') is True, 'gate or anchor wrong'
+assert m.get('git_sha'), 'run manifest has no git_sha'
 assert any(r['status'] == 'accepted' for r in a), 'no camera update accepted'
 log = json.load(open(glob.glob('logs/thesis/qualification/v10_pilot/campaign_log.json')[0]))
 print('pilot outcome', json.dumps(log)[:300])
