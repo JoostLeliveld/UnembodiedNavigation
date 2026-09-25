@@ -46,13 +46,12 @@ from paths import repo_root  # noqa: E402
 from unav_common.camera_model import ObliqueCameraModel  # noqa: E402
 
 REPO = repo_root()
-PIPELINE = REPO / 'logs/track_a_draft'
 # The 09-09 master_capture predates the 09-18 world change (camera C tilt);
 # recapture_v5 is the current-world capture the thesis is fitted on.
 CAPTURE = REPO / 'logs/thesis/captures/v5/part1'
-GATE = PIPELINE / 'stage06_detector_gate/gate_selection_v1/admission_records.csv'
-OUT = REPO / 'logs/studies/thesis_measurement_chain_figure'
-POSE = 602            # the capture's pose id for the drawn detection
+ADMITTED = REPO / 'logs/thesis/fits/gate_dataset/admitted.npz'
+OUT = REPO.parent / 'papers' / 'Thesis' / 'figures'
+POSE = 0              # an admitted current-capture pose for the drawn detection
 CAMERA = 'camera_B'   # the capture's id; the paper calls it camera i
 FOV_H_RAD = 1.5708    # external_camera/model.sdf
 
@@ -246,18 +245,26 @@ def panel_map(ax, model, centre, row) -> np.ndarray:
 
 
 def load_row():
-    """The drawn detection: one admitted gate record, with its captured frame."""
-    gate = pd.read_csv(GATE)
+    """The drawn detection: one admitted current-pipeline record and its frame."""
+    admitted = np.load(ADMITTED, allow_pickle=False)
+    selected = np.flatnonzero(
+        (admitted['plan_pose_index'] == POSE) & (admitted['camera'] == CAMERA)
+    )
+    if len(selected) != 1:
+        raise SystemExit(f'expected one admitted {CAMERA} observation at pose {POSE}, found {len(selected)}')
+    row_index = int(selected[0])
+    bbox = np.asarray(admitted['bbox_xyxy'][row_index], dtype=float)
     index = pd.read_csv(CAPTURE / 'capture_index.csv',
-                        usecols=['pose_id', 'camera_id', 'image', 'camera_range_m'])
-    record = gate[(gate.pose_id == POSE) & (gate.camera_id == CAMERA)
-                  & (gate.admitted == 1)].merge(
-        index.drop(columns=['camera_range_m']), on=['pose_id', 'camera_id'], how='left').iloc[0]
-    # the panels are written against the capture's box and image-path names
-    return record.rename({'best_box_x0': 'x0', 'best_box_y0': 'y0',
-                          'best_box_x1': 'x1', 'best_box_y1': 'y1',
-                          'raw_ground_x': 'raw_x', 'raw_ground_y': 'raw_y',
-                          'raw_best_confidence': 'confidence'})
+                        usecols=['image_sha1', 'image', 'camera_range_m'])
+    image_sha1 = str(admitted['image_sha1'][row_index])
+    match = index[index.image_sha1 == image_sha1]
+    if len(match) != 1:
+        raise SystemExit(f'expected one capture-index row for image {image_sha1}, found {len(match)}')
+    record = match.iloc[0].copy()
+    record['x0'], record['y0'], record['x1'], record['y1'] = bbox
+    record['raw_x'], record['raw_y'] = np.asarray(admitted['raw_xy_m'][row_index], dtype=float)
+    record['confidence'] = float(admitted['confidence'][row_index])
+    return record
 
 
 def main() -> None:

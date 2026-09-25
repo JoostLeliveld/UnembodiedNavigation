@@ -43,11 +43,15 @@ def main() -> None:
                                 'expected_x1': 'x1', 'expected_y1': 'y1'})
 
     cameras = sorted(hits.camera_id.unique())
-    # 2x3 with the last cell blank; the appendix is single column, so it has the
-    # full page width to fill.
-    fig, axes = plt.subplots(3, 2, figsize=(9.6, 7.6))
+    # Three views on the first row and two centred below: all five frames use
+    # the page width without leaving an empty sixth panel.
+    fig = plt.figure(figsize=(9.6, 5.7))
+    grid = fig.add_gridspec(2, 6, wspace=0.06, hspace=0.22)
+    axes = [fig.add_subplot(grid[0, 0:2]), fig.add_subplot(grid[0, 2:4]),
+            fig.add_subplot(grid[0, 4:6]), fig.add_subplot(grid[1, 1:3]),
+            fig.add_subplot(grid[1, 3:5])]
 
-    for ax, camera in zip(axes.ravel(), cameras):
+    for ax, camera in zip(axes, cameras):
         subset = hits[hits.camera_id == camera]
         median_range = subset.camera_range_m.median()
         # the frame closest to this camera's own median range: a typical view, not its best
@@ -89,8 +93,7 @@ def main() -> None:
         inset.add_patch(patches.Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False,
                                           edgecolor=ROBOT, linewidth=1.4))
 
-    axes.ravel()[len(cameras)].axis('off')
-    fig.tight_layout(pad=0.35)
+    fig.subplots_adjust(left=0.012, right=0.988, top=0.95, bottom=0.055)
     OUT.mkdir(parents=True, exist_ok=True)
     for path in (OUT / 'camera_views.pdf', OUT / 'camera_views.png'):
         fig.savefig(path, dpi=200, bbox_inches='tight')

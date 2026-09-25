@@ -38,16 +38,15 @@ COLUMN, TEXT = 3.5, 7.16          # IEEE column and text width (inches)
 MODELS = ("global", "per_camera", "spatial")
 MODEL_KEY = {"global": "m0", "per_camera": "m1", "spatial": "m2"}
 MODEL_LABEL = {"global": "Global", "per_camera": "Per-camera", "spatial": "Spatial",
-               "rproj": "Geometric", "equal": "Equal weights", "best_spatial_single": "Best single",
-               "closest_single": "Closest camera"}
+               "rproj": "Geometric", "equal": "Equal weights", "best_spatial_single": "Best single"}
 MODEL_COLOUR = {"global": "#0072B2", "per_camera": "#E69F00", "spatial": "#009E73",
-                "rproj": "#7f7f7f", "equal": "#b0b0b0", "best_spatial_single": "#595959",
-                "closest_single": "#CC79A7"}
+                "rproj": "#7f7f7f", "equal": "#b0b0b0", "best_spatial_single": "#595959"}
 COLLISION, STUCK, SHORT = "#D55E00", "#CC79A7", "#a6a6a6"
 INK, MUTED, RACK, RACK_EDGE = "#1a1a1a", "#6b6b6b", "#e4e2dc", "#bdbab2"
 from matplotlib.colors import ListedColormap  # noqa: E402
-# Uncertainty is a magnitude drawn in neutral greys, so the coloured routes stay readable.
-SIGMA_CMAP = ListedColormap(plt.get_cmap("Greys")(np.linspace(0.07, 0.92, 256)), name="sigma")
+# Reversed viridis, so low uncertainty (high information) is yellow as in the methodology's
+# planner-field figure; routes carry a dark halo to stay readable on its yellow end.
+SIGMA_CMAP = ListedColormap(plt.get_cmap("viridis_r")(np.linspace(0.0, 1.0, 256)), name="sigma")
 SIGMA_RANGE_CM = (1.5, 60.0)
 NO_SUPPORT_CM = 100.0
 
@@ -128,6 +127,23 @@ def network_sigma(model: str, removed: str | None = None):
     xs, ys, cams, P = precision_field(model)
     keep = [i for i, c in enumerate(cams) if c != removed]
     return xs, ys, sigma_cm(P[keep].sum(axis=0))
+
+
+def network_information(model: str, removed: str | None = None):
+    """Half the trace of the summed camera precision, the planner-field quantity (m^-2)."""
+    xs, ys, cams, P = precision_field(model)
+    keep = [i for i, c in enumerate(cams) if c != removed]
+    return xs, ys, 0.5 * np.trace(P[keep].sum(axis=0), axis1=-2, axis2=-1)
+
+
+def information_vmax() -> float:
+    """The planner-field figure's cap: the 90th percentile of the intact spatial field."""
+    return float(np.percentile(network_information("spatial")[2], 90))
+
+
+def draw_information(ax, xs, ys, values, vmax):
+    return ax.pcolormesh(xs, ys, values, shading="nearest", cmap="viridis", vmin=0.0, vmax=vmax,
+                         zorder=2, rasterized=True)
 
 
 def draw_sigma(ax, xs, ys, sigma, norm):
