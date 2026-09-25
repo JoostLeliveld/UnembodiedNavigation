@@ -1,6 +1,6 @@
 {
  "schema": "thesis_reference_position_campaign_lock.v1",
- "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V9",
+ "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V10",
  "status": "locked_before_refit",
  "method_authority": "docs/METHOD.md",
  "campaign_root": "logs/thesis",
@@ -75,14 +75,16 @@
  },
  "sampling": {
   "loader": "pipeline/dataset.py",
-  "loader_sha256": "00e08c20227ae86e4152f14103fdaa342d8269254dbf4b003572e0a3a942ee43",
-  "positions": "logs/thesis/captures/v9/capture_positions_v9.csv",
-  "positions_sha256": "a2ebfa76dcbb4002a9cdc1e63b85a38b29ce07d26892aecca57413e5c76e2c9c",
+  "loader_sha256": "967b9dd792051c7a97ddb66c83b72b12aecf31c9fe49685da9a711f1d0ab8e6a",
+  "positions": "logs/thesis/captures/v10/capture_positions_v10.csv",
+  "positions_sha256": "d09903c5d1f040cc2266bf31d7b1ba343ebc9d88555ac39f5649f8ccac243493",
   "topup_rule": "pipeline/capture/plan_topup.py",
   "partition_rule": "pipeline/capture/plan_rebalance.py",
   "partition_rule_sha256": "c84b6d6583531c184d4ef13262b9e4c522680910333a89695a5fd9326cc56ca3",
-  "partition": "logs/thesis/captures/v9/partition_v9.csv",
-  "partition_sha256": "eebeca824095bfbb3f94a0b78703db97bb9958a3ffab4357d3597f1b9078617c",
+  "lane_partition_rule": "pipeline/capture/partition_v10.py",
+  "lane_partition_rule_sha256": "33e7e51a3330557e026cc618e7fc32d2cf7f828eec88a8ec417ddcc804bbd26d",
+  "partition": "logs/thesis/captures/v10/partition_v10.csv",
+  "partition_sha256": "803ec7123e65ddc5ecf16d6741f840a59167eb25c966b371aff880f4a6cd12e4",
   "robot_absent_list": "logs/thesis/captures/v8/v5_robot_absent_poses.json",
   "robot_absent_list_sha256": "54f3ac92949522abe48c29819efb4e36ab271c976d1c95b8494cd7093aa68448",
   "capture_passes": {
@@ -116,6 +118,12 @@
     "pose_file": "logs/thesis/captures/v9/capture_poses_v9.json",
     "pose_file_sha256": "ca855ddeb2f6397825b0fe05fd8e8665e5f8b85551d467985e6b8d3fab8c59c9"
    },
+   "lane_v10": {
+    "capture_index": "logs/thesis/captures/v10/lane/capture/capture_index.csv",
+    "capture_index_sha256": "35fecea7a3e131cf2f2ca9a4171fad4855baa2a8dd9f7611b14596f8093c6192",
+    "pose_file": "logs/thesis/captures/v10/lane/capture_poses_v10_lane_kept.json",
+    "pose_file_sha256": "4544df039ecf0541f0f9055171a7e0635de1ce4b140b919dd49a91590f928a7d"
+   },
    "repair": {
     "capture_index": "logs/thesis/captures/v8/repair/capture_index.csv",
     "capture_index_sha256": "a2897dc4f0090c8312c5c7c9f36bd8c002fa01fff8547cbbaf13d8ebafff199c",
@@ -129,16 +137,16 @@
     "pose_file_sha256": "6a3123f85ec76cd60a39d8b089ec8a490ef8051644652f4fa174bade053bdfe0"
    }
   },
-  "position_count": 2769,
-  "expected_camera_opportunities": 55380,
-  "expected_pose_batches": 11076
+  "position_count": 3380,
+  "expected_camera_opportunities": 66510,
+  "expected_pose_batches": 13302
  },
  "partition": {
   "atomic_unit": "complete physical position",
   "roles": {
-   "D_R": 704,
-   "D_dev": 437,
-   "D_mu": 1478,
+   "D_R": 892,
+   "D_dev": 552,
+   "D_mu": 1786,
    "final_audit": 150
   },
   "rules": [
@@ -146,7 +154,7 @@
    "D_mu fits the shared correction; D_R fits R0/R1/R2 only from frozen out-of-sample corrected residuals; D_dev selects frozen hyperparameters; final_audit fits or selects nothing.",
    "Final-audit image content may be accessed only for integrity checks until detector, gate, correction, covariance and planning-information choices are frozen."
   ],
-  "assignment": "roles from captures/v9/partition_v9.csv (capture/plan_rebalance.py): D_dev and D_R spread over 2 x 2 m strata in proportion to robot-valid area, the rest D_mu, final_audit the fresh v9 capture; no captured position is dropped"
+  "assignment": "v9 roles from captures/v9/partition_v9.csv (capture/plan_rebalance.py), lane positions from capture/partition_v10.py inside the v9 strata: D_dev and D_R spread over 2 x 2 m strata in proportion to robot-valid area, the rest D_mu, final_audit the fresh v9 capture; no captured position is dropped"
  },
  "weighting": {
   "independent_unit": "static reference position",
@@ -165,8 +173,8 @@
   "planning_support_population": "all expected opportunities",
   "nis_excluded": true,
   "separate_availability_model_prohibited": true,
-  "expected_working_opportunities": 52380,
-  "expected_working_unique_images": 26491,
+  "expected_working_opportunities": 63510,
+  "expected_working_unique_images": 31702,
   "expected_final_audit_opportunities": 3000
  },
  "capture_implementation": {
@@ -188,5 +196,5 @@
   "Do not fit a separate q_i(p) availability model.",
   "Do not pool this Track-B campaign with earlier drive-based or v3/v4 development evidence."
  ],
- "amendment": "docs/METHOD.md, Amendment 2026-09-24 (v9 balanced split)"
+ "amendment": "docs/METHOD.md, Amendment 2026-09-24 (night): targeted capture v10"
 }
