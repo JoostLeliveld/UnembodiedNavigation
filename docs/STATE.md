@@ -4,6 +4,17 @@ The one place to look for where the data and results are, what has been done, an
 open. Method: `docs/METHOD.md`. Exact inputs: `pipeline/dataset_lock.json` and, once made,
 the campaign manifest. Numbers here are pointers; quote results from the named artifacts.
 
+## Current results (v10, 2026-09-25)
+
+Dataset v10 (v9 plus the lane-grid capture), refit, sealed audit opened once
+(`logs/thesis/final_audit*/`), campaign of 90 valid cells: `logs/thesis/campaign/seed*/` for
+tasks A, B, E, E-long and `logs/thesis/campaign/taskC_goal_rule/seed*/` for task C after its
+goal moved by the task-visibility rule (METHOD amendment 2026-09-25). Analysis:
+`python3 pipeline/analyze_campaign.py` -> `logs/thesis/analysis/`. Figures and drop-ins:
+`figures/make_*.py` -> `logs/thesis/figures/`, copied into `papers/Thesis/figures/`; the results,
+discussion, conclusion and abstract of the thesis quote these artifacts. Sections below that
+describe v8 are history.
+
 ## Where everything is (`logs/`, not in git)
 
 | path | content |
