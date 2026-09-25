@@ -30,7 +30,7 @@ from plan_rebalance import SEED, cell_of, largest_remainder  # noqa: E402
 CAPTURES = REPO / 'logs/thesis/captures'
 V9_PARTITION = CAPTURES / 'v9/partition_v9.csv'
 V9_STRATA = CAPTURES / 'v9/strata_v9.json'
-LANE_POSES = CAPTURES / 'v10/lane/capture_poses_v10_lane.json'
+LANE_POSES = CAPTURES / 'v10/lane/capture_poses_v10_lane_kept.json'
 OUT = CAPTURES / 'v10/partition_v10.csv'
 WORKING = ('D_dev', 'D_R', 'D_mu')
 
