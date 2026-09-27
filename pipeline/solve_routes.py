@@ -52,6 +52,7 @@ def planner(
         control_weight=float(campaign["control_weight"]),
         process_noise_xy=float(campaign["process_noise_xy"]),
         process_noise_theta=float(campaign["process_noise_theta"]),
+        process_noise_model=str(campaign["process_noise_model"]),
         goal_sigma_uv=2.0, risk_weight_obs=1.0,
         ambiguity_weight=1.0, discount_gamma=0.995,
         optimizer_maxiter=int(campaign["optimizer_maxiter"]),
