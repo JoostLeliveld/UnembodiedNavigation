@@ -244,6 +244,8 @@ def generate_launch_description():
                               description='Stddev of additive angular encoder noise used for /odom_noisy.'),
         DeclareLaunchArgument('encoder_noise_correlation_alpha', default_value='0.80',
                               description='AR(1) correlation of encoder slip states.'),
+        DeclareLaunchArgument('process_noise_model', default_value='encoder',
+                              description="'encoder': Q set from the simulated encoder noise; 'constant_psd': legacy."),
         DeclareLaunchArgument('encoder_wheel_diameter_ratio_error', default_value='0.00121',
                               description='Systematic right/left wheel diameter mismatch (UMBmark LabMate).'),
         DeclareLaunchArgument('encoder_wheelbase_ratio', default_value='0.991765',
