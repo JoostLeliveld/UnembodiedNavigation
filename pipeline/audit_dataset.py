@@ -72,7 +72,7 @@ def main() -> int:
     v9_identity = (equivalence["current_world_sha256"], script)
     report["world_equivalence_passed"] = bool(equivalence.get("passed"))
     for name, identity in identities.items():
-        allowed = {v5_identity} | ({v9_identity} if name in ("audit_v9", "lane_v10") and equivalence.get("passed")
+        allowed = {v5_identity} | ({v9_identity} if name in ("audit_v9", "lane_v10", "fill_v11") and equivalence.get("passed")
                                    and equivalence.get("v8_world_sha256") == v5_identity[0] else set())
         if identity not in allowed:
             failures.append(f"capture identity: {name}")

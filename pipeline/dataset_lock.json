@@ -1,6 +1,6 @@
 {
  "schema": "thesis_reference_position_campaign_lock.v1",
- "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V10",
+ "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V11",
  "status": "locked_before_refit",
  "method_authority": "docs/METHOD.md",
  "campaign_root": "logs/thesis",
@@ -75,16 +75,16 @@
  },
  "sampling": {
   "loader": "pipeline/dataset.py",
-  "loader_sha256": "967b9dd792051c7a97ddb66c83b72b12aecf31c9fe49685da9a711f1d0ab8e6a",
-  "positions": "logs/thesis/captures/v10/capture_positions_v10.csv",
-  "positions_sha256": "d09903c5d1f040cc2266bf31d7b1ba343ebc9d88555ac39f5649f8ccac243493",
+  "loader_sha256": "28b9a3dc5e976af7b9ef438b88030f6e53da73c728d9210a1a2f20a8ea8de5c9",
+  "positions": "logs/thesis/captures/v11/capture_positions_v11.csv",
+  "positions_sha256": "cd13dcd0f89b95eab5c6ba6c6ffa961fdb5ff977ae6917ebde4e9cb72830741f",
   "topup_rule": "pipeline/capture/plan_topup.py",
-  "partition_rule": "pipeline/capture/plan_rebalance.py",
-  "partition_rule_sha256": "c84b6d6583531c184d4ef13262b9e4c522680910333a89695a5fd9326cc56ca3",
-  "lane_partition_rule": "pipeline/capture/partition_v10.py",
-  "lane_partition_rule_sha256": "33e7e51a3330557e026cc618e7fc32d2cf7f828eec88a8ec417ddcc804bbd26d",
-  "partition": "logs/thesis/captures/v10/partition_v10.csv",
-  "partition_sha256": "803ec7123e65ddc5ecf16d6741f840a59167eb25c966b371aff880f4a6cd12e4",
+  "partition_rule": "pipeline/capture/partition_v11.py",
+  "partition_rule_sha256": "280e9529462818ed637539c312c17c4c2716c776a2aa46beec5efbbd9a025ad6",
+  "strata": "logs/thesis/captures/v9/strata_v9.json",
+  "strata_sha256": "0d9c2d23cd0940058b809b9dc3beb8637f7749c6ffc4261df99876c28941630d",
+  "partition": "logs/thesis/captures/v11/partition_v11.csv",
+  "partition_sha256": "b833b2cdc9d328b886d2dcd2abe8115f30652f12cfacdaf7c2646ea41b4fffac",
   "robot_absent_list": "logs/thesis/captures/v8/v5_robot_absent_poses.json",
   "robot_absent_list_sha256": "54f3ac92949522abe48c29819efb4e36ab271c976d1c95b8494cd7093aa68448",
   "capture_passes": {
@@ -124,6 +124,12 @@
     "pose_file": "logs/thesis/captures/v10/lane/capture_poses_v10_lane_kept.json",
     "pose_file_sha256": "4544df039ecf0541f0f9055171a7e0635de1ce4b140b919dd49a91590f928a7d"
    },
+   "fill_v11": {
+    "capture_index": "logs/thesis/captures/v11/fill/capture/capture_index.csv",
+    "capture_index_sha256": "37c90fd554c19bd1f16dfbebc0651b0b2e80311c17da36976fcc5107d3989eb4",
+    "pose_file": "logs/thesis/captures/v11/fill/capture_poses_v11_fill.json",
+    "pose_file_sha256": "7717556564e2d83d3dfffc6b4e4097bbefd67206e662c5bcd26413408d744b9f"
+   },
    "repair": {
     "capture_index": "logs/thesis/captures/v8/repair/capture_index.csv",
     "capture_index_sha256": "a2897dc4f0090c8312c5c7c9f36bd8c002fa01fff8547cbbaf13d8ebafff199c",
@@ -137,24 +143,26 @@
     "pose_file_sha256": "6a3123f85ec76cd60a39d8b089ec8a490ef8051644652f4fa174bade053bdfe0"
    }
   },
-  "position_count": 3380,
-  "expected_camera_opportunities": 66510,
-  "expected_pose_batches": 13302
+  "position_count": 3853,
+  "expected_camera_opportunities": 75970,
+  "expected_pose_batches": 15194
  },
  "partition": {
   "atomic_unit": "complete physical position",
   "roles": {
-   "D_R": 892,
-   "D_dev": 552,
-   "D_mu": 1786,
-   "final_audit": 150
+   "D_R": 1333,
+   "D_dev": 335,
+   "D_mu": 1326,
+   "excluded": 223,
+   "final_audit": 168,
+   "unused": 468
   },
   "rules": [
    "All headings, repetitions and cameras for one position remain in exactly one role.",
    "D_mu fits the shared correction; D_R fits R0/R1/R2 only from frozen out-of-sample corrected residuals; D_dev selects frozen hyperparameters; final_audit fits or selects nothing.",
    "Final-audit image content may be accessed only for integrity checks until detector, gate, correction, covariance and planning-information choices are frozen."
   ],
-  "assignment": "v9 roles from captures/v9/partition_v9.csv (capture/plan_rebalance.py), lane positions from capture/partition_v10.py inside the v9 strata: D_dev and D_R spread over 2 x 2 m strata in proportion to robot-valid area, the rest D_mu, final_audit the fresh v9 capture; no captured position is dropped"
+  "assignment": "capture/partition_v11.py: every captured position re-split as one dataset; inside each v9 2 x 2 m stratum positions are ordered by sha256(seed, key) regardless of capture; final_audit, D_dev and D_R take area-proportional quotas, the rest D_mu; no captured position is dropped"
  },
  "weighting": {
   "independent_unit": "static reference position",
@@ -173,9 +181,9 @@
   "planning_support_population": "all expected opportunities",
   "nis_excluded": true,
   "separate_availability_model_prohibited": true,
-  "expected_working_opportunities": 63510,
-  "expected_working_unique_images": 31702,
-  "expected_final_audit_opportunities": 3000
+  "expected_working_opportunities": 59880,
+  "expected_working_unique_images": 28781,
+  "expected_final_audit_opportunities": 3360
  },
  "capture_implementation": {
   "script": "pipeline/capture/capture_positions.py",
@@ -196,5 +204,5 @@
   "Do not fit a separate q_i(p) availability model.",
   "Do not pool this Track-B campaign with earlier drive-based or v3/v4 development evidence."
  ],
- "amendment": "docs/METHOD.md, Amendment 2026-09-24 (night): targeted capture v10"
+ "amendment": "docs/METHOD.md, Amendment 2026-09-25 (afternoon): one dataset, re-split (v11)"
 }

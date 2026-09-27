@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from collections import Counter
 
 import paper as P
@@ -70,24 +71,52 @@ def fusion_table(fusion):
     return fusion["batches"] if "batches" in fusion else m["spatial"]["batches"], "\n".join(lines)
 
 
+def fused_sq_errors(run):
+    """Squared fused error, one per fusion decision (fused vs ground truth at the fused stamp)."""
+    out = {}
+    with (P.REPO / run / "fusion_observations.csv").open(newline="") as handle:
+        for r in csv.DictReader(handle):
+            if r["decision_seq"] in out:
+                continue
+            try:
+                v = [float(r[k]) for k in ("fused_x", "fused_y", "gt_x_at_fused", "gt_y_at_fused")]
+            except ValueError:
+                continue
+            if all(math.isfinite(x) for x in v):
+                out[r["decision_seq"]] = (v[0] - v[2]) ** 2 + (v[1] - v[3]) ** 2
+    return list(out.values())
+
+
+def missed_updates(run, period_s=0.2):
+    """Share of 0.2 s camera periods without an accepted update: k = round(gap / 0.2) periods per
+    gap between accepted updates, k - 1 of them missed."""
+    with (P.REPO / run / "correction_assimilations.csv").open(newline="") as handle:
+        stamps = sorted(float(r["apply_stamp"]) for r in csv.DictReader(handle) if r["accepted"] in ("1", "True", "true"))
+    k = [round(d / period_s) for d in (b - a for a, b in zip(stamps, stamps[1:]))]
+    return sum(max(x - 1, 0) for x in k) / sum(k) if sum(k) else math.nan
+
+
 def navigation_table(rows, summary):
+    """Rows of tab:navigation-final: success, fused RMSE pooled over the condition, belief error
+    and belief sigma (means over runs), missed updates (mean over runs)."""
     lines = []
     for model in P.MODELS:
         for state in ("intact", "removal"):
-            arm = [r for r in rows if r["model"] == model and r["state"] == state]
-            n = len(arm)
-            fail = Counter(r["failure"] for r in arm if r["success"] != "1")
+            arm = [r for r in rows if r["model"] == model and r["state"] == state and r.get("run_dir")]
             a = summary["arms"][f"{model}_{state}"]
-            succ = f"{a['successes']}/{n}"
-            if model == "spatial" and state == "removal":
-                succ = f"\\textbf{{{succ}}}"
+            succ = f"{a['successes']}/{a['cells']}"
+            fused = [e for r in arm for e in fused_sq_errors(r["run_dir"])]
+            missed = [missed_updates(r["run_dir"]) for r in arm]
             lines.append(
-                f"        {P.MODEL_LABEL[model]}, {'intact' if state == 'intact' else 'removal':<7} & {succ}"
-                f" & {fail['collision']}/{n} & {fail['stuck']}/{n} & {fail['goal_distance']}/{n}"
-                f" & {a['belief_error_m']['mean']:.3f} & {a['belief_sigma_major_m']['mean']:.3f}"
-                f" & {a['min_clearance_m']['mean']:.3f} & {a['path_length_m']['mean']:.2f}"
-                f" & {a['duration_s']['mean']:.1f} \\\\")
+                f"        {P.MODEL_LABEL[model]}, {'intact' if state == 'intact' else 'dropout':<7} & {succ}"
+                f" & {100 * math.sqrt(sum(fused) / len(fused)):.2f} & {100 * a['belief_error_m']['mean']:.2f}"
+                f" & {100 * a['belief_sigma_major_m']['mean']:.2f} & {100 * np_nanmean(missed):.1f} \\\\")
     return "\n".join(lines)
+
+
+def np_nanmean(values):
+    values = [v for v in values if math.isfinite(v)]
+    return sum(values) / len(values) if values else math.nan
 
 
 def route_changes(rows):
@@ -139,9 +168,8 @@ def main():
 % === Table: navigation (replace the tabular body of tab:navigation-final) =======
 % 5 tasks x 3 matched seeds per arm; 90 of 90 runs evidence-valid. Success: stopped at the
 % goal on the belief, true final distance < 0.30 m, never left the driveable region.
-% The four outcome columns partition the runs. Metric columns are means over runs.
-% Suggested header: Condition & Success & Collision & Stuck & Short & Belief err. (m)
-%   & Belief $\\sigma$ (m) & Clearance (m) & Length (m) & Time (s) \\\\
+% Fused error: RMSE over fusion decisions, pooled over the condition. Belief error and sigma:
+% means over runs. Missed updates: share of 0.2 s camera periods without an accepted update.
 {nav_rows}
 
 % === In-text numbers =============================================================

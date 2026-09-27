@@ -48,12 +48,33 @@ def bind(cfg: dict) -> dict:
 
 
 def main() -> int:
-    argparse.ArgumentParser(description=__doc__).parse_args()
-    out_dir = ROOT / "campaign_configs"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "campaign_configs",
+                        help="Directory for generated planning and per-seed configs.")
+    parser.add_argument("--only-task", action="append", default=[],
+                        help="Include only this task; repeat to create a scoped campaign revision.")
+    args = parser.parse_args()
+    out_dir = args.output_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     planning = bind(yaml.safe_load((HERE / "route_planning_template.yaml").read_text()))
+    if args.only_task:
+        requested = set(args.only_task)
+        unknown = requested.difference(planning["tasks"])
+        if unknown:
+            raise ValueError("unknown --only-task value(s): " + ", ".join(sorted(unknown)))
+        planning["tasks"] = {name: cfg for name, cfg in planning["tasks"].items() if name in requested}
     (out_dir / "route_planning_campaign.yaml").write_text(yaml.safe_dump(planning, sort_keys=False))
     execution = bind(yaml.safe_load((HERE / "execution_template.yaml").read_text()))
+    if args.only_task:
+        execution["tasks"] = {name: cfg for name, cfg in execution["tasks"].items()
+                              if name in requested}
+    # Task-visibility rule: every start and goal must stay seen with the task's camera removed.
+    import sys
+    sys.path.insert(0, str(REPO))
+    from pipeline.check_task_visibility import failures
+    failed = failures(execution)
+    if failed:
+        raise SystemExit("task-visibility rule failed:\n  " + "\n  ".join(failed))
     for seed in SEEDS:
         per_seed = yaml.safe_load(yaml.safe_dump(execution))
         per_seed["study_title"] = f"camera-removal campaign, seed {seed}"

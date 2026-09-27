@@ -83,8 +83,8 @@ def main():
     bx.set_xscale("log"); bx.set_xlim(0.3, 80); bx.set_ylim(0, 1.0)
     bx.set_xticks([1, 3, 10, 30]); bx.set_xticklabels(["1", "3", "10", "30"])
     bx.set_xlabel("position error (cm)", labelpad=1); bx.set_ylabel("fraction of observations", labelpad=1)
-    bx.legend(loc="upper left", fontsize=6, handlelength=1.6, title="RMSE (cm)", title_fontsize=6,
-              borderaxespad=0.1)
+    bx.text(0.36, 0.78, f"corrected\nRMSE {100 * rmse['corrected']:.1f} cm", fontsize=6, ha="left")
+    bx.text(23, 0.1, f"raw\nRMSE {100 * rmse['raw']:.1f} cm", fontsize=6, ha="right", color="#6f6f6f")
     fig.text(0.47, 0.97, "(b)", fontweight="bold", va="top")
     P.save(fig, "correction")
     print({k: round(100 * v, 2) for k, v in rmse.items()}, "observations", len(keys), "positions", len(set(keys)))

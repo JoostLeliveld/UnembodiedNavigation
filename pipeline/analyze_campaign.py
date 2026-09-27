@@ -2,7 +2,8 @@
 """Analyse the camera-removal campaign: one row per run, per-arm tables, matched differences.
 
 Reads logs/thesis/campaign/seed*/campaign_log.json (the runner's ledger; the task C rerun
-under campaign/taskC_goal_rule/seed*) and each run's
+under campaign/taskC_goal_rule/seed*, the task B/C camera-swap rerun under
+revisions/bc_dropout_swap/runs/seed*) and each run's
 own artifacts; writes logs/thesis/analysis/:
   runs.csv          one row per campaign cell (5 tasks x 6 conditions x 3 seeds)
   collisions.json   the offline footprint score of every run (pipeline/score_collisions.py)
@@ -38,6 +39,10 @@ from pipeline.score_collisions import DriveableRegion, read_poses, score_poses  
 
 CAMPAIGN = REPO / "logs/thesis/campaign"
 ROUTES = REPO / "logs/thesis/routes"
+# Tasks B and C swap their removed camera (B removes camera C, C removes camera B) and their
+# goals moved to pass the task-visibility rule under the swap, so both tasks were rerun in all six
+# conditions with routes re-solved; those entries replace the campaign's.
+BC_SWAP = REPO / "logs/thesis/revisions/bc_dropout_swap"
 OUT = REPO / "logs/thesis/analysis"
 SEEDS = (91500, 91501, 91502)
 MODELS = ("global", "per_camera", "spatial")
@@ -72,8 +77,8 @@ def mean_after(path: Path, column: str, start_s: float) -> float:
     return float(np.mean(values)) if values else math.nan
 
 
-def route_name(task: str, condition: str, route_sha: str) -> str:
-    result = json.loads((ROUTES / task / "manifest.json").read_text())["results"][condition]
+def route_name(task: str, condition: str, route_sha: str, routes: Path = ROUTES) -> str:
+    result = json.loads((routes / task / "manifest.json").read_text())["results"][condition]
     if result["preselected_route"]["sha256"] != route_sha:
         raise RuntimeError(f"{task}/{condition}: run used a route other than the solved one")
     return result["selected_source"].split(":")[-1]
@@ -98,7 +103,8 @@ def run_row(task: str, condition: str, seed: int, entry: dict | None, region) ->
     row.update({
         "outcome": entry["outcome"],
         "completion_reason": entry["completion_reason"],
-        "route": route_name(task, condition, entry["preselected_route_sha256"]),
+        "route": route_name(task, condition, entry["preselected_route_sha256"],
+                            BC_SWAP / "routes" if run.is_relative_to(BC_SWAP) else ROUTES),
         "success": int(success),
         "failure": ("" if success else "collision" if collision else
                     "goal_distance" if stopped else entry["outcome"]),
@@ -201,6 +207,24 @@ def plot_trajectories(rows: list[dict], task_names: list[str]) -> None:
     plt.close(fig)
 
 
+LOG_ROOTS = (CAMPAIGN, CAMPAIGN / "taskC_goal_rule", BC_SWAP / "runs")
+
+
+def source_identities() -> dict:
+    """The commit and config each log root's runner froze, per seed."""
+    out = {}
+    for root in LOG_ROOTS:
+        for seed in SEEDS:
+            path = root / f"seed{seed}/source_snapshot/source_identity.json"
+            if path.is_file():
+                identity = json.loads(path.read_text())
+                out[str(path.parent.parent.relative_to(REPO))] = {
+                    "git_sha": identity["git_provenance"]["git_sha"],
+                    "git_dirty": identity["git_provenance"]["git_dirty"],
+                    "campaign_config_sha256": identity["campaign_config_sha256"]}
+    return out
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     region = DriveableRegion.for_world()
@@ -210,7 +234,8 @@ def main() -> int:
         ledger = {}
         # The task C rerun (METHOD amendment 2026-09-25) has its own log root, because a
         # resumed root must share one commit; its entries replace any older task C entries.
-        for root in (CAMPAIGN, CAMPAIGN / "taskC_goal_rule"):
+        # The B/C swap rerun likewise replaces every task B and C entry.
+        for root in LOG_ROOTS:
             path = root / f"seed{seed}/campaign_log.json"
             ledger.update(json.loads(path.read_text()) if path.is_file() else {})
         for task in task_names:
@@ -232,7 +257,7 @@ def main() -> int:
     (OUT / "collisions.json").write_text(json.dumps(scores, indent=1, default=str) + "\n")
     summary = {
         "schema": "thesis_campaign_analysis.v1",
-        "campaign_manifest": json.loads((CAMPAIGN / "manifest.json").read_text())["commit"],
+        "source_identity": source_identities(),
         "success_rule": f"stopped at goal on belief, true final goal distance < {SUCCESS_GOAL_DISTANCE_M} m, "
                         "no footprint exit, evidence complete",
         "cells": len(rows), "valid": sum(valid(r) for r in rows),

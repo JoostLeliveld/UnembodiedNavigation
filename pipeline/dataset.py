@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The reference-position dataset (v10 = v9 + the lane-grid capture): one loader for every stage.
+"""The reference-position dataset (v11 = the v10 captures, re-split as one dataset): one loader for every stage.
 
 v9 is an INDEX over the capture passes, not a copy. Its rows are
 
@@ -29,7 +29,12 @@ supplement pose overlaps an object.
 * the v10 lane-grid capture (keys `Lnnnn`, planned by `capture/plan_hard_views.py`), with
   roles from `capture/partition_v10.py` inside the v9 strata.
 
-Roles (v10). `captures/v10/partition_v10.csv` is `captures/v9/partition_v9.csv` unchanged plus
+Roles (v11). `captures/v11/partition_v11.csv`, written by `capture/partition_v11.py`, re-splits
+every captured position as one dataset: inside each v9 2 x 2 m stratum all positions are
+ordered by sha256(seed, key) regardless of capture, and take the final audit, D_dev and D_R
+quotas (area-proportional, the v10 totals), the rest D_mu. The v10 roles below are superseded.
+
+Roles (v10, superseded). `captures/v10/partition_v10.csv` is `captures/v9/partition_v9.csv` unchanged plus
 the lane positions. Every v9 position's role comes from `captures/v9/partition_v9.csv`, written by
 `capture/plan_rebalance.py`: D_dev and D_R are spread over 2 x 2 m strata in proportion to
 the area the robot can occupy, the rest of the captured positions are D_mu, and the final
@@ -58,7 +63,8 @@ V5 = CAPTURES / "v5"
 V8 = CAPTURES / "v8"
 V9 = CAPTURES / "v9"
 V10 = CAPTURES / "v10"
-PARTITION = V10 / "partition_v10.csv"
+V11 = CAPTURES / "v11"
+PARTITION = V11 / "partition_v11.csv"
 
 V5_PLAN = V5 / "capture_poses_v5.json"
 V5_POSITIONS = V5 / "capture_positions_v5.csv"
@@ -78,6 +84,8 @@ EXTENSIONS = (
      V5_PLAN_POSES + 48 + 200),
     ("lane_v10", V10 / "lane/capture", V10 / "lane/capture_poses_v10_lane_kept.json",
      V5_PLAN_POSES + 48 + 200 + 600),
+    ("fill_v11", V11 / "fill/capture", V11 / "fill/capture_poses_v11_fill.json",
+     V5_PLAN_POSES + 48 + 200 + 600 + 2226),
 )
 # repair passes in order; a later pass overrides an earlier one for the plan poses it holds
 REPAIRS = (
@@ -160,14 +168,14 @@ def _extension_rows(only_ok: bool, v8_only: bool = False) -> list[dict]:
     role_of = _nearest_v5_role()
     out = []
     for name, directory, pose_file, offset in EXTENSIONS:
-        if v8_only and name in ("audit_v9", "lane_v10"):
+        if v8_only and name in ("audit_v9", "lane_v10", "fill_v11"):
             continue
         poses = _load_json(pose_file)
         for row in _index_rows(directory, only_ok):
             i = int(row["pose_id"])
             p = poses[i]
             _check_pose(name, row, p)
-            role = ("none" if name == "audit_v9" else "unassigned" if name == "lane_v10"
+            role = ("none" if name == "audit_v9" else "unassigned" if name in ("lane_v10", "fill_v11")
                     else role_of(p["x"], p["y"]))
             row = dict(row)
             row.update(_DEFAULTS)
@@ -252,7 +260,8 @@ def _check_unique(rows: list[dict]) -> None:
         seen[k] = r["capture_source"]
 
 
-def load_rows(*, only_ok: bool = True, v8_only: bool = False) -> list[dict]:
+def load_rows(*, only_ok: bool = True, v8_only: bool = False,
+              apply_partition: bool = True) -> list[dict]:
     """Every dataset row, keyed onto the plan, with capture_source, position_key, yaw_idx,
     plan_pose_index and the role (`stratum`) attached. `v8_only` returns the v8 index with
     its v8 roles (what `capture/plan_rebalance.py` plans from)."""
@@ -267,16 +276,17 @@ def load_rows(*, only_ok: bool = True, v8_only: bool = False) -> list[dict]:
         raise RuntimeError(f"{len(rejected)} poses lie in robot-absent runs; re-capture them "
                            "before using the dataset")
     _check_unique(rows)
-    return rows if v8_only else _apply_partition(rows)
+    # apply_partition=False gives the pool before any role, for capture/partition_v11.py
+    return rows if v8_only or not apply_partition else _apply_partition(rows)
 
 
 def _apply_partition(rows: list[dict]) -> list[dict]:
-    """Set every row's role from the v9 partition; keep the v8 role for provenance."""
+    """Set every row's role from the v11 partition; keep the previous role for provenance."""
     with PARTITION.open(newline="", encoding="utf-8") as handle:
         role = {r["position_key"]: r["role"] for r in csv.DictReader(handle)}
     present = {r["position_key"] for r in rows}
     if present - set(role) or set(role) - present:
-        raise RuntimeError(f"v9 partition and captured positions differ: "
+        raise RuntimeError(f"v11 partition and captured positions differ: "
                            f"{len(present - set(role))} unassigned, {len(set(role) - present)} missing")
     for r in rows:
         r["v8_role"] = r["stratum"]

@@ -28,16 +28,16 @@ tasks:
     conditions: *conditions
     seeds: *seeds
     condition_overrides:
-      global_removal: &remove_b {manager_camera_ids: 'camera_A,camera_C,camera_D,camera_E', camera_network_active_camera_ids: 'camera_A,camera_C,camera_D,camera_E', removed_camera_id: camera_B}
-      per_camera_removal: *remove_b
-      spatial_removal: *remove_b
+      global_removal: &remove_c_for_b {manager_camera_ids: 'camera_A,camera_B,camera_D,camera_E', camera_network_active_camera_ids: 'camera_A,camera_B,camera_D,camera_E', removed_camera_id: camera_C}
+      per_camera_removal: *remove_c_for_b
+      spatial_removal: *remove_c_for_b
   thesis10_camera_c_inner_warehouse_detour:
     conditions: *conditions
     seeds: *seeds
     condition_overrides:
-      global_removal: &remove_c {manager_camera_ids: 'camera_A,camera_B,camera_D,camera_E', camera_network_active_camera_ids: 'camera_A,camera_B,camera_D,camera_E', removed_camera_id: camera_C}
-      per_camera_removal: *remove_c
-      spatial_removal: *remove_c
+      global_removal: &remove_b_for_c {manager_camera_ids: 'camera_A,camera_C,camera_D,camera_E', camera_network_active_camera_ids: 'camera_A,camera_C,camera_D,camera_E', removed_camera_id: camera_B}
+      per_camera_removal: *remove_b_for_c
+      spatial_removal: *remove_b_for_c
   thesis10_camera_e_eastern_detour:
     conditions: *conditions
     seeds: *seeds

@@ -35,9 +35,9 @@ tasks:
     seeds: *id003
     condition_overrides:
       global_removal: &id004
-        manager_camera_ids: camera_A,camera_C,camera_D,camera_E
-        camera_network_active_camera_ids: camera_A,camera_C,camera_D,camera_E
-        removed_camera_id: camera_B
+        manager_camera_ids: camera_A,camera_B,camera_D,camera_E
+        camera_network_active_camera_ids: camera_A,camera_B,camera_D,camera_E
+        removed_camera_id: camera_C
       per_camera_removal: *id004
       spatial_removal: *id004
   thesis10_camera_c_inner_warehouse_detour:
@@ -45,9 +45,9 @@ tasks:
     seeds: *id003
     condition_overrides:
       global_removal: &id005
-        manager_camera_ids: camera_A,camera_B,camera_D,camera_E
-        camera_network_active_camera_ids: camera_A,camera_B,camera_D,camera_E
-        removed_camera_id: camera_C
+        manager_camera_ids: camera_A,camera_C,camera_D,camera_E
+        camera_network_active_camera_ids: camera_A,camera_C,camera_D,camera_E
+        removed_camera_id: camera_B
       per_camera_removal: *id005
       spatial_removal: *id005
   thesis10_camera_e_eastern_detour:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""(Re)write the dataset lock (v10) from the index: roles, counts and source hashes.
+"""(Re)write the dataset lock (v11) from the index: roles, counts and source hashes.
 
 The index itself (dataset.load_rows) refuses any robot-absent run, so a
 lock is only written for a dataset that passed the presence check.
@@ -48,7 +48,7 @@ def main() -> int:
             "y": round(float(r["robot_y"]), 4), "role": r["stratum"],
             "source": r["capture_source"], "v8_role": r["v8_role"], "camera_opportunities": 0})
         p["camera_opportunities"] += 1
-    table = f"{CAPTURES}/v10/capture_positions_v10.csv"
+    table = f"{CAPTURES}/v11/capture_positions_v11.csv"
     with (REPO / table).open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(next(iter(positions.values()))))
         writer.writeheader()
@@ -60,8 +60,8 @@ def main() -> int:
     lock = copy.deepcopy(json.loads(LOCK.read_text()))
     lock.pop("derived_from", None)
     lock.update({
-        "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V10", "status": "locked_before_refit",
-        "campaign_root": ROOT, "amendment": "docs/METHOD.md, Amendment 2026-09-24 (night): targeted capture v10",
+        "lock_id": "THESIS-REFERENCE-POSITION-DATASET-V11", "status": "locked_before_refit",
+        "campaign_root": ROOT, "amendment": "docs/METHOD.md, Amendment 2026-09-25 (afternoon): one dataset, re-split (v11)",
         "audit_command": "python3 pipeline/audit_dataset.py",
     })
     lock["detector"]["checkpoint"] = CHECKPOINT
@@ -71,10 +71,9 @@ def main() -> int:
         "loader": "pipeline/dataset.py", "loader_sha256": sha("pipeline/dataset.py"),
         "positions": table, "positions_sha256": sha(table),
         "topup_rule": "pipeline/capture/plan_topup.py",
-        "partition_rule": "pipeline/capture/plan_rebalance.py",
-        "partition_rule_sha256": sha("pipeline/capture/plan_rebalance.py"),
-        "lane_partition_rule": "pipeline/capture/partition_v10.py",
-        "lane_partition_rule_sha256": sha("pipeline/capture/partition_v10.py"),
+        "partition_rule": "pipeline/capture/partition_v11.py",
+        "partition_rule_sha256": sha("pipeline/capture/partition_v11.py"),
+        "strata": f"{CAPTURES}/v9/strata_v9.json", "strata_sha256": sha(f"{CAPTURES}/v9/strata_v9.json"),
         "partition": rel(ds.PARTITION), "partition_sha256": sha(rel(ds.PARTITION)),
         "robot_absent_list": rel(ds.ABSENT_LIST), "robot_absent_list_sha256": sha(rel(ds.ABSENT_LIST)),
         "capture_passes": {
@@ -88,10 +87,10 @@ def main() -> int:
     lock["partition"]["roles"] = dict(sorted(roles.items()))
     lock["partition"].pop("added_position_rule", None)
     lock["partition"]["assignment"] = (
-        "v9 roles from captures/v9/partition_v9.csv (capture/plan_rebalance.py), lane positions "
-        "from capture/partition_v10.py inside the v9 strata: D_dev and D_R spread "
-        "over 2 x 2 m strata in proportion to robot-valid area, the rest D_mu, final_audit the "
-        "fresh v9 capture; no captured position is dropped")
+        "capture/partition_v11.py: every captured position re-split as one dataset; inside "
+        "each v9 2 x 2 m stratum positions are ordered by sha256(seed, key) regardless of "
+        "capture; final_audit, D_dev and D_R take area-proportional quotas, the rest D_mu; "
+        "no captured position is dropped")
     lock["opportunity_accounting"].update({
         "expected_working_opportunities": len(work),
         "expected_working_unique_images": len({r["image_sha1"] for r in work}),

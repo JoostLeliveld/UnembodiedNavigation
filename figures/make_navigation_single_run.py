@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Follow one intact run and test the camera model against the outcome.
+"""Follow one intact run through the deployed chain, in the problem figure's terms.
 
-The campaign figure shows that every model was run on every task and seed.
-This figure takes one intact run and walks the deployed chain along it: the
-raw projection, the correction that removes its offset, the covariance the
-spatial model predicted at each position it was queried, and the fused belief
-that results.  The positions driven here were available to the covariance fit,
-so this shows the deployed model calibrated in use, not an out-of-sample test.
+The problem statement plots the raw along-ray and across-ray residuals of one
+drive.  This figure takes one intact campaign run and shows the same two
+components before correction (left column, as in the problem figure) and after
+correction with the runtime covariance's predicted two-sigma band (right
+column), plus the fused estimate against its own predicted spread.  The
+positions driven here were available to the covariance fit, so this shows the
+deployed model calibrated in use, not an out-of-sample test.
 """
 from __future__ import annotations
 
@@ -18,7 +19,6 @@ import sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.colors import PowerNorm  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -28,27 +28,22 @@ sys.path.insert(0, str(ROOT / "figures"))
 from style import CAM_COLOUR, draw_warehouse, layout  # noqa: E402
 
 PAPER_FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
-CAMPAIGN = ROOT / (
-    "logs/track_a_draft/stage09_final_five_seed_campaign/"
-    "thesis09_parallel_aisles_west"
-)
-PRECISION = ROOT / (
-    "logs/track_a_draft/planning_precision/m2_planning_precision.npz"
-)
-RAW = "#9b9a94"
-CORRECTED = "#1d2530"
-BELIEF = "#0072B2"
+CAMPAIGN = Path(__import__("os").environ.get("THESIS_CAMPAIGN_ROOT", ROOT / "logs/thesis/campaign"))
+INK = "#222831"
+BELIEF = "#2a78d6"
+GAP = 0.5  # s; a longer pause in one camera's stream breaks its band
 
 
-def run_directory(condition: str, seed: str) -> Path:
-    matches = sorted(glob.glob(str(CAMPAIGN / condition / seed / "attempts/*/experiment_*/")))
+def run_directory(task: str, condition: str, seed: str) -> Path:
+    matches = sorted(glob.glob(str(
+        CAMPAIGN / seed / task / condition / seed / "attempts/*/experiment_*/")))
     if len(matches) != 1:
-        raise ValueError(f"{condition}/{seed}: expected one run, found {len(matches)}")
+        raise ValueError(f"{task}/{condition}/{seed}: expected one run, found {len(matches)}")
     return Path(matches[0])
 
 
-def load(condition: str, seed: str) -> dict:
-    directory = run_directory(condition, seed)
+def load(task: str, condition: str, seed: str) -> dict:
+    directory = run_directory(task, condition, seed)
     experiment = pd.read_csv(directory / "experiment.csv")
     step = np.hypot(experiment["state_x"].diff().fillna(0.0),
                     experiment["state_y"].diff().fillna(0.0))
@@ -64,144 +59,133 @@ def load(condition: str, seed: str) -> dict:
     fusion = fusion[fusion["used"].astype(bool)].copy()
     fusion["t"] = fusion["stamp"] - origin
     fusion = fusion[fusion["t"] >= -1.0].copy()
-    # Each admitted observation against the truth at its own capture stamp.
-    fusion["raw_error"] = np.hypot(fusion["raw_obs_x"] - fusion["gt_x_at_obs"],
-                                   fusion["raw_obs_y"] - fusion["gt_y_at_obs"])
-    fusion["corrected_error"] = np.hypot(fusion["obs_x"] - fusion["gt_x_at_obs"],
-                                         fusion["obs_y"] - fusion["gt_y_at_obs"])
-    # The spatial model's prediction for that camera at that position, as one
-    # equivalent circular standard deviation.
-    fusion["predicted_sd"] = np.sqrt(
-        0.5 * (fusion["obs_cov_xx"] + fusion["obs_cov_yy"]))
 
-    batches = fusion.drop_duplicates("source_batch_id").copy()
-    batches["fused_error"] = np.hypot(batches["fused_x"] - batches["gt_x_at_fused"],
-                                      batches["fused_y"] - batches["gt_y_at_fused"])
-    batches["fused_sd"] = np.sqrt(
-        0.5 * (batches["fused_cov_xx"] + batches["fused_cov_yy"]))
+    # The camera-ray frame of the problem figure: parallel points from the
+    # camera through the raw measurement, perpendicular is its rotation.
+    mount = {c.name: np.array([c.x, c.y]) for c in layout().cameras}
+    camera = np.stack([mount[str(name)] for name in fusion["camera"]])
+    raw = fusion[["raw_obs_x", "raw_obs_y"]].to_numpy()
+    truth = fusion[["gt_x_at_obs", "gt_y_at_obs"]].to_numpy()
+    corrected = fusion[["obs_x", "obs_y"]].to_numpy()
+    ray = raw - camera
+    ray /= np.linalg.norm(ray, axis=1, keepdims=True)
+    across = np.column_stack([-ray[:, 1], ray[:, 0]])
+    cov = np.stack([
+        np.stack([fusion["obs_cov_xx"], fusion["obs_cov_xy"]], axis=-1),
+        np.stack([fusion["obs_cov_xy"], fusion["obs_cov_yy"]], axis=-1)], axis=-2)
+    for name, basis in (("par", ray), ("perp", across)):
+        fusion[f"raw_{name}"] = np.einsum("ij,ij->i", raw - truth, basis)
+        fusion[f"corr_{name}"] = np.einsum("ij,ij->i", corrected - truth, basis)
+        # Predicted one-sigma of the runtime covariance along this direction.
+        fusion[f"sd_{name}"] = np.sqrt(np.einsum("ni,nij,nj->n", basis, cov, basis))
 
-    waypoints = pd.read_csv(directory / "global_waypoints.csv")
+    batches = fusion.groupby("source_batch_id").agg(
+        t=("t", "mean"), n=("camera", "size"),
+        fused_x=("fused_x", "first"), fused_y=("fused_y", "first"),
+        gx=("gt_x_at_fused", "first"), gy=("gt_y_at_fused", "first"),
+        cxx=("fused_cov_xx", "first"), cyy=("fused_cov_yy", "first"),
+    ).sort_values("t")
+    batches["error"] = np.hypot(batches["fused_x"] - batches["gx"],
+                                batches["fused_y"] - batches["gy"])
+    batches["sd"] = np.sqrt(0.5 * (batches["cxx"] + batches["cyy"]))
+
     return {"experiment": experiment, "fusion": fusion, "batches": batches,
-            "waypoints": waypoints}
+            "waypoints": pd.read_csv(directory / "global_waypoints.csv")}
 
 
-def precision_field() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    with np.load(PRECISION, allow_pickle=False) as archive:
-        xs = np.asarray(archive["xs"], dtype=float)
-        ys = np.asarray(archive["ys"], dtype=float)
-        precision = np.asarray(archive["matched_precision_m2_inv"], dtype=float)
-    return xs, ys, 0.5 * np.trace(precision.sum(axis=0), axis1=-2, axis2=-1)
+def broken(t: np.ndarray, *values: np.ndarray):
+    """Insert NaN where a camera's stream pauses, so bands do not bridge gaps."""
+    cut = np.where(np.diff(t) > GAP)[0] + 1
+    return [np.insert(v.astype(float), cut, np.nan) for v in (t, *values)]
 
 
-def draw_map(ax: plt.Axes, run: dict, field: tuple) -> None:
-    xs, ys, values = field
-    ax.pcolormesh(xs, ys, values, shading="nearest", cmap="viridis",
-                  norm=PowerNorm(gamma=0.42, vmin=0.0,
-                                 vmax=float(np.percentile(values[values > 0], 99))),
-                  rasterized=True, zorder=0)
+def draw_map(ax: plt.Axes, run: dict) -> None:
     draw_warehouse(ax, layout(), show_cameras=True, camera_labels=True, rack_alpha=0.82)
-    waypoints = run["waypoints"]
-    ax.plot(waypoints["x"], waypoints["y"], color="white", lw=2.3, ls="--",
-            zorder=14, dash_capstyle="round")
-    experiment = run["experiment"]
-    ax.plot(experiment["state_x"], experiment["state_y"], color=BELIEF, lw=1.9,
-            zorder=16, solid_capstyle="round")
-    ax.scatter(experiment["state_x"].iloc[0], experiment["state_y"].iloc[0],
-               s=26, color="#111111", zorder=20)
-    ax.scatter(waypoints["x"].iloc[-1], waypoints["y"].iloc[-1], s=62,
-               color="#111111", marker="*", zorder=20)
-    ax.set(xlim=(-11.8, 11.8), ylim=(-9.75, 9.75), aspect="equal")
-    ax.set_title("(a) Executed route over the spatial precision field",
-                 fontsize=8.0, fontweight="bold")
-    ax.tick_params(labelsize=6.2)
-    ax.set_xlabel("east (m)", fontsize=7.0)
-    ax.set_ylabel("north (m)", fontsize=7.0)
-
-
-def draw_camera_map(ax: plt.Axes, run: dict) -> None:
-    """Where each camera was admitted, so the time panels can be read spatially."""
-    draw_warehouse(ax, layout(), show_cameras=True, camera_labels=True, rack_alpha=0.82)
+    waypoints, experiment = run["waypoints"], run["experiment"]
+    ax.plot(waypoints["x"], waypoints["y"], color="#555b63", lw=0.9, ls="--",
+            alpha=0.75, zorder=14)
+    ax.plot(experiment["gt_x"], experiment["gt_y"], color=INK, lw=1.6, zorder=15)
     for camera, group in run["fusion"].groupby("camera"):
-        ax.scatter(group["gt_x_at_obs"], group["gt_y_at_obs"], s=3.0,
-                   color=CAM_COLOUR[str(camera)], linewidths=0, alpha=0.75,
-                   zorder=15, label=f"camera {camera}")
+        ax.scatter(group["gt_x_at_obs"], group["gt_y_at_obs"], s=4,
+                   color=CAM_COLOUR[str(camera)], lw=0, alpha=0.6, zorder=16)
+    ax.plot(experiment["gt_x"].iloc[0], experiment["gt_y"].iloc[0], "o", ms=4.5,
+            mfc="white", mec=INK, zorder=20)
+    ax.plot(waypoints["x"].iloc[-1], waypoints["y"].iloc[-1], "*", ms=8,
+            mfc="white", mec=INK, zorder=20)
     ax.set(xlim=(-11.8, 11.8), ylim=(-9.75, 9.75), aspect="equal")
-    ax.set_title("(b) Admitted observations by camera", fontsize=8.0,
-                 fontweight="bold")
-    ax.tick_params(labelsize=6.2)
-    ax.set_xlabel("east (m)", fontsize=7.0)
-    ax.legend(frameon=False, fontsize=5.8, loc="upper center",
-              bbox_to_anchor=(0.5, -0.06), ncol=4, handletextpad=0.15,
-              columnspacing=0.6, markerscale=2.4)
+    ax.set_xticks([-10, -5, 0, 5, 10])
+    ax.set_yticks([-5, 0, 5])
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_title("(a) Executed route and admitted observations", loc="left")
+
+
+def draw_raw(
+        ax: plt.Axes, fusion: pd.DataFrame, column: str, *, show_camera_means: bool = True
+) -> None:
+    ax.axhline(0, color=INK, lw=0.7)
+    for camera, group in fusion.groupby("camera"):
+        colour = CAM_COLOUR[str(camera)]
+        ax.scatter(group["t"], 100 * group[column], s=3, color=colour, lw=0, alpha=0.65)
+        if show_camera_means:
+            ax.axhline(100 * group[column].mean(), color=colour, lw=0.65, ls="--", alpha=0.8)
+
+
+def draw_corrected(ax: plt.Axes, fusion: pd.DataFrame, name: str) -> None:
+    ax.axhline(0, color=INK, lw=0.7)
+    for camera, group in fusion.groupby("camera"):
+        colour = CAM_COLOUR[str(camera)]
+        group = group.sort_values("t")
+        t, sd = broken(group["t"].to_numpy(), 100 * group[f"sd_{name}"].to_numpy())
+        ax.fill_between(t, -2 * sd, 2 * sd, color=colour, alpha=0.13, lw=0)
+        ax.plot(t, 2 * sd, color=colour, lw=0.6, alpha=0.8)
+        ax.plot(t, -2 * sd, color=colour, lw=0.6, alpha=0.8)
+        ax.scatter(group["t"], 100 * group[f"corr_{name}"], s=3, color=colour,
+                   lw=0, alpha=0.85, zorder=4)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--task", default="thesis10_camera_a_western_dock_detour")
     parser.add_argument("--seed", default="seed91500")
     parser.add_argument("--condition", default="spatial_intact")
     arguments = parser.parse_args()
 
-    run = load(arguments.condition, arguments.seed)
+    run = load(arguments.task, arguments.condition, arguments.seed)
     fusion, batches = run["fusion"], run["batches"]
+    plt.rcParams.update({"font.size": 6.5, "axes.titlesize": 7.5,
+                         "axes.titleweight": "bold", "axes.labelsize": 6.5,
+                         "xtick.labelsize": 5.8, "ytick.labelsize": 5.8})
 
-    fig = plt.figure(figsize=(7.16, 8.05), constrained_layout=True)
-    grid = fig.add_gridspec(4, 2, height_ratios=(2.30, 1.10, 1.34, 1.10))
+    fig = plt.figure(figsize=(7.16, 2.75), constrained_layout=True)
+    grid = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.25))
+    ax_map = fig.add_subplot(grid[:, 0])
+    draw_map(ax_map, run)
+    ax_map.set_title("(a) Executed route and admitted observations", loc="left")
 
-    draw_map(fig.add_subplot(grid[0, 0]), run, precision_field())
-    draw_camera_map(fig.add_subplot(grid[0, 1]), run)
-
-    # (c) the correction, along the drive.
-    ax_correction = fig.add_subplot(grid[1, :])
-    ax_correction.scatter(fusion["t"], 100.0 * fusion["raw_error"], s=3.0,
-                          color=RAW, linewidths=0, label="raw projection")
-    ax_correction.scatter(fusion["t"], 100.0 * fusion["corrected_error"], s=3.0,
-                          color=CORRECTED, linewidths=0, label="after correction")
-    ax_correction.set_yscale("log")
-    ax_correction.set_ylabel("observation error (cm)")
-    ax_correction.set_title("(c) Observation error along the drive, before and "
-                            "after correction", fontsize=8.0)
-    ax_correction.legend(frameon=False, fontsize=6.3, ncol=2, loc="lower left",
-                         markerscale=2.2)
-
-    # (d) the predicted covariance against the realised error, per camera.
-    ax_predicted = fig.add_subplot(grid[2, :], sharex=ax_correction)
-    for camera, group in fusion.groupby("camera"):
-        colour = CAM_COLOUR[str(camera)]
-        group = group.sort_values("t")
-        ax_predicted.fill_between(group["t"], 0.0, 100.0 * group["predicted_sd"],
-                                  color=colour, alpha=0.18, linewidth=0, zorder=2)
-        ax_predicted.plot(group["t"], 100.0 * group["predicted_sd"], color=colour,
-                          lw=1.0, zorder=4)
-        ax_predicted.scatter(group["t"], 100.0 * group["corrected_error"], s=3.2,
-                             color=colour, linewidths=0, alpha=0.85, zorder=6)
-    ax_predicted.set_ylabel("error and predicted SD (cm)")
-    ax_predicted.set_ylim(0.0, 12.0)
-    ax_predicted.set_title("(d) Predicted observation SD (line) against the realised "
-                           "error (points), per camera", fontsize=8.0)
-    handles = [Line2D([0], [0], color=CAM_COLOUR[str(c)], lw=1.4, label=f"camera {c}")
-               for c in sorted(fusion["camera"].astype(str).unique())]
-    ax_predicted.legend(handles=handles, frameon=False, fontsize=6.3, ncol=4,
-                        loc="upper right")
-
-    # (e) the fused belief against its own predicted spread.
-    ax_belief = fig.add_subplot(grid[3, :], sharex=ax_correction)
-    ax_belief.fill_between(batches["t"], 0.0, 200.0 * batches["fused_sd"],
-                           color=BELIEF, alpha=0.20, linewidth=0,
-                           label=r"predicted $2\sigma$ of the fused estimate")
-    ax_belief.plot(batches["t"], 100.0 * batches["fused_error"], color=CORRECTED,
-                   lw=0.95, label="realised fused error")
-    ax_belief.set_yscale("log")
-    ax_belief.set(xlabel="time after first command (s)")
-    ax_belief.set_ylabel("fused error (cm)")
-    ax_belief.set_title("(e) Fused estimate against its predicted spread", fontsize=8.0)
-    ax_belief.legend(frameon=False, fontsize=6.3, ncol=2, loc="lower left")
-
-    for ax in (ax_correction, ax_predicted, ax_belief):
-        ax.grid(axis="y", color="#e2e2e2", lw=0.45)
+    rows = (("par", "along-ray error [cm]"), ("perp", "across-ray error [cm]"))
+    first = None
+    for row, (name, label) in enumerate(rows):
+        ax = fig.add_subplot(grid[row, 1], sharex=first)
+        first = first or ax
+        draw_corrected(ax, fusion, name)
+        ax.set_ylim(-12, 12)
+        ax.set_ylabel(label)
         ax.spines[["top", "right"]].set_visible(False)
-        ax.tick_params(labelsize=6.6)
-        ax.xaxis.label.set_fontsize(7.0)
-        ax.yaxis.label.set_fontsize(7.0)
+        ax.grid(axis="y", color="#e2e2e2", lw=0.45)
+        if row == 0:
+            ax.tick_params(axis="x", labelbottom=False)
+            ax.set_title(r"(b) Corrected residuals with predicted $\pm2\sigma$", loc="left")
+        else:
+            ax.set_xlabel("time after first command [s]")
+
+    handles = [Line2D([], [], marker="o", ls="none", color=CAM_COLOUR[c], ms=4,
+                      label=f"camera {c}")
+               for c in sorted(fusion["camera"].astype(str).unique())]
+    handles += [Line2D([], [], color="#555b63", ls="--", lw=0.9, label="planned path"),
+                Line2D([], [], color=INK, lw=1.4, label="executed trajectory")]
+    fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False,
+               fontsize=6, bbox_to_anchor=(0.5, -0.09))
 
     PAPER_FIGURES.mkdir(parents=True, exist_ok=True)
     for suffix in ("pdf", "png"):

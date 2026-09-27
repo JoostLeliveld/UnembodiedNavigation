@@ -708,3 +708,73 @@ Decided by the author, frozen before any v10 image is captured.
   `logs/thesis/superseded_taskC_blind_goal_20260925/`, and the old task C runs are moved there
   as evidence of the blind-finish failure mechanism. Task C alone is rerun (6 conditions x 3
   seeds); the other four tasks' runs are unchanged.
+
+## Amendment 2026-09-25 (afternoon): one dataset, even density (v11)
+
+Decided by the author after the v10 audit was opened.
+
+- **Why.** In v10 the roles came from different captures and different densities: the whole
+  final audit was one separate capture, and the correction fit held 12 positions per m^2 in
+  the southern apron against 3.5 to 5 in the aisles. On D_dev the corrected error and the R2
+  calibration are worst in the narrow aisles between the racks, where the correction fit is
+  thinnest. A development set and an audit drawn differently from the fit sets do not
+  describe the same data.
+- **Design** (`pipeline/capture/plan_fill_v11.py`, `pipeline/capture/partition_v11.py`,
+  seed 20260925). One dataset: every role is an even sample of the same valid area and only
+  its density differs. Covariance fit 8 / m^2, derived from R2 (K / (pi (2 l_R)^2), K = 16,
+  l_R = 0.4 m); correction fit 8 / m^2 (the same resolution, a choice); development 2 / m^2;
+  test (final audit) 1 / m^2; 19 / m^2 in total over 167.5 m^2 of valid area.
+- **Valid positions.** Four captured headings, and the 0.80 x 0.55 m footprint clears the
+  collision scene by the capture body clearance at every heading inside the site (the v8
+  top-up rule). 223 captured positions fail this (109 with two headings) and are `excluded`.
+- **Fill capture.** Every v9 2 x 2 m stratum below ceil(19 x valid area) is filled with new
+  positions at valid 0.1 m sub-grid points farthest from every existing position, never
+  closer than 0.15 m (473 positions, four headings each). 25 strata stay one to four short
+  because no point is 0.15 m clear; they fall short in D_mu.
+- **Roles.** Inside a stratum the valid positions are ordered by sha256(seed, key),
+  regardless of capture, and take area-proportional quotas in the order test, D_dev, D_R,
+  D_mu. Positions beyond the quotas, mostly in the dense apron, are `unused`: they enter no fit
+  and no evaluation. Thinning by density was rejected in amendment G to keep data; it is
+  accepted here because an even sample is the purpose of this amendment.
+- **Not a sealed audit.** The v10 audit has been opened and some of its images are now
+  working data, so the v11 test set is a held-out split of one dataset, not a fresh capture.
+  It is still used once and never for selection.
+- **Unchanged.** Detector (its training positions are outside the pool), gate, correction and
+  covariance methods, fixed R2 constants, planner, tasks, seeds, goal rule and collision.
+- **Reruns required.** The whole chain from detector inference to the campaign, analysis,
+  figures and drop-ins. The v10 fits and campaign are superseded and kept as evidence.
+
+## Amendment 2026-09-26: B/C dropout swap, goals moved by the task-visibility rule
+
+- **Swap (author).** Task B removes camera C and task C removes camera B. Run in lockstep, like
+  every other campaign run (a first rerun without lockstep is kept in
+  `logs/thesis/revisions/bc_dropout_swap/superseded_nonlockstep_20260926/`).
+- **Rule re-checked after the swap** with `pipeline/check_task_visibility.py` (the rule of the
+  2026-09-25 amendment, now a script; `pipeline/campaign_configs.py` refuses a config whose
+  start or goal fails it). Under the swap both goals failed: task B (0.975, 8.625) seen by E in
+  51% of views, task C (-3.05, 5.6) by C in 52%. The first swap campaign therefore tested blind
+  finishes; it is kept as evidence in `.../superseded_blindgoal_20260926/`.
+- **Change.** Each goal moves to the first point on its own lane that passes, scanned from the
+  old goal in 0.1 m steps: task B to (0.975, 7.25) (D, 93%), task C to (-3.05, 6.35) (C, 90%).
+  Route seeds keep their shape and end at the new goal. Tasks B and C are rerun in all six
+  conditions x three seeds into `logs/thesis/revisions/bc_dropout_swap/`;
+  `pipeline/analyze_campaign.py` takes every B and C entry from there. Tasks A and both E
+  tasks are unchanged.
+
+## Amendment 2026-09-27: task C redesigned by search
+
+- **Why.** With camera B removed, the old task C (and every start tried along its bottom lane)
+  was decided by the risk term for every model, not by camera information: the planner's
+  objective is the arrival-gated mean of the step costs, so a covered detour that spends many
+  steps near the goal wins on risk. No model changed route. (The thesis equation now states this
+  mean; the old seed `northern_crossing` also crossed a rack and was fixed first.)
+- **Search** (`pipeline/search_dropout_tasks.py`, result
+  `logs/thesis/revisions/bc_dropout_swap/task_search_camera_B.json`). Lane-grid start/goal pairs
+  that pass the task-visibility rule without B; routes up to 1.4x the shortest; the shortest
+  blind (spatial field < 10 m^-2) for >= 3 m and an alternative with no blind stretch; each scored
+  as a fixed rollout with the planner's own objective. Kept: every model and condition picks the
+  same route except spatial after the dropout. 9 of 702 pairs; the two best confirmed with the
+  full solver.
+- **Choice.** Start (-3.05, 8.625) facing south, goal (0.975, -5.75), seeds `middle_aisle` and
+  `north_east_lanes`, equal length (18.4 m), start and goal seen by C / A in 100% of views.
+  Solved routes: middle_aisle for five conditions, north_east_lanes for spatial_removal.
