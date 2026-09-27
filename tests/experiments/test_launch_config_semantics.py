@@ -7,6 +7,7 @@ import pytest
 from experiments.core.visibility_launch_common import (
     DEFAULT_MANAGER_FUSION_RULE,
     _as_bool,
+    _odom_yaw_offset_rad,
     manager_arm_settings,
 )
 from unav_common.config import local_controller_type
@@ -102,3 +103,13 @@ def test_campaign_runner_does_not_enable_encoder_noise_from_false_string(tmp_pat
     }
     command = campaign._build_launch_cmd(cfg, "task", "spatial_intact", 1, tmp_path)
     assert "odom_topic:=/odom" in command
+
+
+def test_world_frame_encoder_yaw_is_not_offset_by_spawn_yaw():
+    """The ground-truth-driven encoder already publishes map-frame yaw."""
+    cfg = {
+        "odom_topic": "/odom_noisy", "use_encoder_noise": True,
+        "spawn": {"x": 1.0, "y": 2.0, "yaw": -1.5708},
+    }
+    assert _odom_yaw_offset_rad(cfg, "/odom_noisy") == 0.0
+    assert _odom_yaw_offset_rad({**cfg, "use_encoder_noise": False}, "/odom") == pytest.approx(-1.5708)

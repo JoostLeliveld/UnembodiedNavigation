@@ -794,6 +794,11 @@ Decided by the author after the v10 audit was opened.
   adds only the declared noise, plus systematic wheel errors from UMBmark (TRC LabMate:
   D_R/D_L 1.00121, wheelbase 337.2/340 mm). The realised drift of the previous setting was
   measured at 0.98 % of distance and 0.76 deg per 90 deg turned (median).
+- **Frame correction found by the final qualification.** The true-motion encoder initializes
+  and integrates `/odom_noisy` in the world/map frame, including the declared spawn yaw. The
+  launcher had retained the old raw-odometry spawn-yaw offset and therefore applied that yaw
+  twice on non-zero-yaw tasks. `/odom_noisy` now uses zero additional yaw offset; raw `/odom`
+  still uses the spawn transform. The failed qualification is kept outside the campaign tree.
 - **Q.** Set, not fitted: the white-noise equivalent of that encoder noise in the IWAI
   continuous-time derivation, with input-dependent PSDs (PROCESS_NOISE.md). Planner and
   estimator use the same Q; the planner predicts the estimator's belief, whose growth is the
@@ -851,4 +856,3 @@ Decided by the author after the v10 audit was opened.
   Seeds descend at x = -6.95.
 - **Task E.** Kept as the control task (no model changes route). Start (10.6, -5.75) facing north
   near camera E, with a lower-crossing seed; passes the rule without camera D (camera A 1.00).
-

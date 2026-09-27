@@ -9,6 +9,10 @@ method change: record it in METHOD.md first.
 - Wheel odometry is used. The encoder starts from the TRUE body velocity
   (`/ground_truth_tf`, decimated to 50 Hz), not the Gazebo DiffDrive wheel odometry,
   which carries Gazebo's own undescribed wheel-floor slip.
+- The true-motion encoder initializes and integrates `/odom_noisy` in the map frame, so its
+  yaw already includes the spawn yaw and receives no additional launcher offset. Raw `/odom`
+  begins at yaw zero and retains the spawn-yaw transform. This is test-guarded; applying both
+  transforms was caught by the final pre-campaign qualification on task A.
 - Declared encoder noise, set explicitly in both campaign templates (test-guarded):
   multiplicative AR(1) slip, alpha 0.80, std 0.125 (v) / 0.075 (w), mean 0;
   additive white per 50 Hz sample, 0.004 m/s (v) / 0.050 rad/s (w).

@@ -1352,6 +1352,12 @@ def resolve_world_setup(cfg: Dict[str, object]) -> Dict[str, object]:
     return cfg
 
 
+def _odom_yaw_offset_rad(cfg: Dict[str, object], odom_topic: str) -> float:
+    """Map raw local odometry yaw to map yaw without double-transforming /odom_noisy."""
+    return (0.0 if _as_bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy'
+            else float(cfg['spawn']['yaw']))
+
+
 def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     """Create shared nodes/components for the thesis pipeline."""
     state_sources = _state_estimator_metadata(cfg)
@@ -1359,6 +1365,11 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
     use_encoder_noise = _as_bool(cfg.get('use_encoder_noise', True))
     if not use_encoder_noise and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
+    # The modelled encoder is initialized from Gazebo's world-frame pose and integrates in
+    # that frame, so /odom_noisy already carries map-frame yaw. Raw /odom starts at yaw zero
+    # and still needs the declared spawn-yaw transform. Applying the offset to /odom_noisy
+    # a second time made every non-zero-yaw task start with the wrong belief heading.
+    odom_yaw_offset_rad = _odom_yaw_offset_rad(cfg, odom_topic)
     sim_pkg = FindPackageShare('sim')
     sim_launch_arguments = {
         'use_sim_time': 'true',
@@ -1545,7 +1556,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
         'odom_topic': odom_topic,
         'odom_heading_timeout_s': cfg['odom_heading_timeout_s'],
         'odom_heading_sigma_rad': 0.08,
-        'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
+        'odom_yaw_offset_rad': odom_yaw_offset_rad,
         'infer_yaw_from_motion': False,
         'seed': cfg['seed'],
         'diagnostics_match_tolerance_s': 1e-3,
@@ -2289,6 +2300,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
     odom_topic = str(cfg.get('odom_topic') or '/odom_noisy')
     if not _as_bool(cfg.get('use_encoder_noise', True)) and odom_topic == '/odom_noisy':
         odom_topic = '/odom'
+    odom_yaw_offset_rad = _odom_yaw_offset_rad(cfg, odom_topic)
     raw_use_nogo_cost = cfg.get('use_nogo_cost', 'auto')
     if isinstance(raw_use_nogo_cost, str) and raw_use_nogo_cost in ('', 'auto', 'default'):
         resolved_use_nogo_cost = False
@@ -2387,9 +2399,9 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'odom_topic': odom_topic,
             'use_odom_for_predict': cfg['use_odom_for_predict'],
             'heading_update_mode': cfg['heading_update_mode'],
-            # Spawn-yaw offset so the multicam belief heading lands in map_bev
-            # (single-cam path applies this in pixel_to_bev; multicam replaces it).
-            'odom_yaw_offset_rad': float(cfg['spawn']['yaw']),
+            # /odom_noisy already integrates the world-frame ground-truth pose; raw /odom
+            # begins at zero yaw and needs the spawn transform.
+            'odom_yaw_offset_rad': odom_yaw_offset_rad,
             # Declared initial prior at the task start (the task declaration, not ground truth).
             'initial_belief_from_task_start': _as_bool(cfg.get('initial_belief_from_task_start', False)),
             'initial_belief_xyyaw': [float(cfg['spawn']['x']), float(cfg['spawn']['y']),
