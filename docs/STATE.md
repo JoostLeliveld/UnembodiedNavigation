@@ -4,7 +4,28 @@ The one place to look for where the data and results are, what has been done, an
 open. Method: `docs/METHOD.md`. Exact inputs: `pipeline/dataset_lock.json` and, once made,
 the campaign manifest. Numbers here are pointers; quote results from the named artifacts.
 
-## Current results (v10, 2026-09-25)
+## Final campaign preparation (v11, 2026-09-27)
+
+The final v11 dataset, frozen detector, correction and R0/R1/R2 fits remain unchanged by
+the 2026-09-27 execution amendment. The amendment replaces the constant process-noise PSD
+with `process_noise_model: encoder`, set directly from the declared simulated encoder noise;
+uses the coupled camera-XY heading update described by the method; and revises tasks A, B and
+E. Q is set, not fitted. See `docs/ODOMETRY_NOISE_LOCK.md`, `docs/PROCESS_NOISE.md` and the
+2026-09-27 amendments in `docs/METHOD.md`.
+
+The canonical pending run is rooted at `logs/thesis/final_campaign/`. Its 30 routes were
+solved at commit `f9b03b36` and all 30 passed the real `ff_fb` swept-footprint replay
+(`routes/follower_replay_check.json`, zero failures). Three per-seed campaign configs,
+totalling 90 matched cells, are bound beneath `final_campaign/campaign_configs/`. The campaign
+has **not started**. Before
+launch, `pipeline/campaign_manifest.py` must freeze the committed launcher and all inputs;
+`pipeline/campaign.sh` refuses input drift or less than 6 GiB free space. At the time of this
+update the filesystem had only 2.3 GiB free, so storage is the launch blocker.
+
+No final-v11 navigation result may be quoted until the new campaign, integrity audit and
+analysis are complete. The results below are superseded development evidence.
+
+## Superseded results (v10, 2026-09-25)
 
 Dataset v10 (v9 plus the lane-grid capture), refit, sealed audit opened once
 (`logs/thesis/final_audit*/`), campaign of 90 valid cells: `logs/thesis/campaign/seed*/` for

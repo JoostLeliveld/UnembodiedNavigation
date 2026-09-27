@@ -7,13 +7,14 @@ state, before the campaign. The footprint is swept between steps against the phy
 region (zero margin, `pipeline/score_collisions.py`) and, for information, against the
 planner's inflated obstacles and shrunk boundary.
 
-Writes logs/thesis/routes/follower_replay_check.json; exits non-zero if any route fails to
+Writes a follower_replay_check.json beside the selected routes; exits non-zero if any route fails to
 arrive or leaves the physical region.
 
-    python3 pipeline/replay_routes.py
+    python3 pipeline/replay_routes.py --routes logs/thesis/final_campaign/routes
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -32,7 +33,6 @@ from unav_common.rectangular_footprint import RectangularFootprint, constant_twi
 from pipeline.score_collisions import DriveableRegion  # noqa: E402
 
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
-ROUTES = REPO / "logs/thesis/routes"
 ARRIVAL_M = 0.20
 
 
@@ -78,9 +78,14 @@ def replay(cfg, planner, physical, start, goal, waypoints, max_steps=1200):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--routes", type=Path, default=REPO / "logs/thesis/final_campaign/routes",
+                        help="Directory containing one solved-route directory per task.")
+    args = parser.parse_args()
+    routes = args.routes.resolve()
     cfg, planner, physical, tasks = setup()
     rows, failing = [], 0
-    for tdir in sorted(p for p in ROUTES.iterdir() if p.is_dir() and not p.name.endswith(".incomplete")):
+    for tdir in sorted(p for p in routes.iterdir() if p.is_dir() and not p.name.endswith(".incomplete")):
         t = tasks[tdir.name]
         for rf in sorted(tdir.glob("*.route.json")):
             wps = [tuple(p) for p in json.loads(rf.read_text())]
@@ -92,7 +97,8 @@ def main() -> int:
                          "min_planner_clearance_m": round(float(w["planner"]), 4), "failed": bad})
             print(f"{tdir.name:46s} {rows[-1]['condition']:20s} arrived={ok!s:5s} phys={w['physical']:7.3f}"
                   f" plan={w['planner']:7.3f}{'  <-- FAIL' if bad else ''}")
-    (ROUTES / "follower_replay_check.json").write_text(json.dumps({"routes": rows, "failing": failing}, indent=1))
+    (routes / "follower_replay_check.json").write_text(
+        json.dumps({"routes": rows, "failing": failing}, indent=1) + "\n")
     print(f"failing: {failing} of {len(rows)}")
     return 1 if failing or not rows else 0
 
