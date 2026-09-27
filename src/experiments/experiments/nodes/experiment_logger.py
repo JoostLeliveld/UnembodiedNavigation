@@ -273,6 +273,9 @@ class ExperimentLogger(Node):
         self.declare_parameter('encoder_noise_angular_slip_std', 0.03)
         self.declare_parameter('encoder_noise_linear_additive_std', 0.004)
         self.declare_parameter('encoder_noise_angular_additive_std', 0.020)
+        self.declare_parameter('encoder_wheel_diameter_ratio_error', 0.0)
+        self.declare_parameter('encoder_wheelbase_ratio', 1.0)
+        self.declare_parameter('process_noise_model', 'constant_psd')
         self.declare_parameter('encoder_noise_correlation_alpha', 0.8)
         self.declare_parameter('optimizer_maxiter', 80)
         self.declare_parameter('optimizer_maxfun', 500)
@@ -540,6 +543,9 @@ class ExperimentLogger(Node):
         self.encoder_noise_angular_slip_std = float(self.get_parameter('encoder_noise_angular_slip_std').value)
         self.encoder_noise_linear_additive_std = float(self.get_parameter('encoder_noise_linear_additive_std').value)
         self.encoder_noise_angular_additive_std = float(self.get_parameter('encoder_noise_angular_additive_std').value)
+        self.encoder_wheel_diameter_ratio_error = float(self.get_parameter('encoder_wheel_diameter_ratio_error').value)
+        self.encoder_wheelbase_ratio = float(self.get_parameter('encoder_wheelbase_ratio').value)
+        self.process_noise_model = str(self.get_parameter('process_noise_model').value)
         self.encoder_noise_correlation_alpha = float(self.get_parameter('encoder_noise_correlation_alpha').value)
         self.optimizer_maxiter = int(self.get_parameter('optimizer_maxiter').value)
         self.optimizer_maxfun = int(self.get_parameter('optimizer_maxfun').value)
@@ -894,6 +900,8 @@ class ExperimentLogger(Node):
             'encoder_noise_angular_slip_std': self.encoder_noise_angular_slip_std,
             'encoder_noise_linear_additive_std': self.encoder_noise_linear_additive_std,
             'encoder_noise_angular_additive_std': self.encoder_noise_angular_additive_std,
+            'encoder_wheel_diameter_ratio_error': self.encoder_wheel_diameter_ratio_error,
+            'encoder_wheelbase_ratio': self.encoder_wheelbase_ratio,
             'encoder_noise_correlation_alpha': self.encoder_noise_correlation_alpha,
             'perception_use_geometry_occlusion': self.perception_use_geometry_occlusion,
             'use_nogo_cost': self.use_nogo_cost,
@@ -945,6 +953,7 @@ class ExperimentLogger(Node):
             'control_weight': self.control_weight,
             'process_noise_xy': self.process_noise_xy,
             'process_noise_theta': self.process_noise_theta,
+            'process_noise_model': self.process_noise_model,
             'optimizer_maxiter': self.optimizer_maxiter,
             'optimizer_maxfun': self.optimizer_maxfun,
             'optimizer_ftol': self.optimizer_ftol,

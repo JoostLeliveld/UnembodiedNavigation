@@ -1859,6 +1859,10 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                     'encoder_noise_angular_additive_std',
                     _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
                 ),
+                'encoder_wheel_diameter_ratio_error': cfg.get(
+                    'encoder_wheel_diameter_ratio_error', _ENCODER_WHEEL_DIAMETER_RATIO_ERROR),
+                'encoder_wheelbase_ratio': cfg.get('encoder_wheelbase_ratio', _ENCODER_WHEELBASE_RATIO),
+                'process_noise_model': cfg['process_noise_model'],
                 'encoder_noise_correlation_alpha': cfg.get(
                     'encoder_noise_correlation_alpha',
                     _ENCODER_NOISE_CORRELATION_ALPHA,

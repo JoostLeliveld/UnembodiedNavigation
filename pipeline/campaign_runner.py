@@ -1503,6 +1503,7 @@ def _existing_entry_matches_config(
         'optimizer_route_seed_mode',
         'local_nogo_penalty_type',
         'heading_update_mode',
+        'process_noise_model',
         'state_correction_mode',
         'local_controller_type',
         'global_planner_mode',
