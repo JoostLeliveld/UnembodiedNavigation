@@ -1,7 +1,7 @@
 # Odometry, noise, Q and updates — locked 2026-09-27
 
 Authority for the simulated odometry, the process noise and the estimator update.
-Supersedes the 2026-09-14 process-noise lock (constant 0.02/0.08 PSDs), which is kept
+Heading mode decided: coupled. Supersedes the 2026-09-14 process-noise lock (constant 0.02/0.08 PSDs), which is kept
 only as the legacy `process_noise_model: constant_psd`. Changing anything here is a
 method change: record it in METHOD.md first.
 
@@ -36,19 +36,21 @@ method change: record it in METHOD.md first.
   reported one).
 - In camera_xy_only the heading variance is the process-noise heading PSD integrated
   along the odometry since start.
-- HEADING MODE: OPEN, decided after the coupled closed-loop pilot.
-  - `coupled` (standard EKF, heading corrected through its correlation with position)
-    is what the thesis text describes. Offline on the new-world pilot it improved heading
-    while cameras see the robot and roughly doubled cross-track error after coverage
-    ends (camera error drifts with the view at coverage edges).
-  - `camera_xy_only` (heading from odometry) was better after coverage ends.
+- HEADING MODE: `coupled` (decided 2026-09-27). Standard EKF: the position measurement
+  corrects heading through its correlation with position, from the declared task heading
+  prior. This is what the thesis text describes. Known cost, reported as a limitation: at
+  coverage edges the camera error drifts with the view and bends the heading (offline on
+  the new-world pilot: roughly double the cross-track error after coverage ends compared
+  with heading from odometry). `camera_xy_only` remains available and was the better
+  estimator after coverage loss; it is not the method.
 
 ## 4. Accepted limitations (reported, not modelled)
 - With an honest Q the position belief is overconfident (pilot: cross-track 95 %
   coverage 0.77 while seen, 0.64-0.71 after): R from a static survey is overconfident and
   camera errors are correlated frame to frame and drift with the view.
-- Heading error contributes to failures after coverage loss; mitigations are a gyro/IMU
-  or better odometry, a view-dependent R, or a per-camera bias state.
+- Heading error, fed by drifting camera errors at coverage edges, contributes to failures
+  after coverage loss. Mitigations: a gyro/IMU or better odometry; on the perception side a
+  filter over each camera's correlated error (per-camera bias state) or a view-dependent R.
 
 ## Provenance
 Commits 10aa3a29, 02f0a5a3, 38044a06, 0e65d8c3, 8e8ee77b. Analyses in

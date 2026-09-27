@@ -95,7 +95,7 @@ manager_max_cross_camera_disagreement_m: 1.0
 manager_require_consistency_when_source_available: false
 state_correction_mode: fused
 state_correction_ekf: true
-heading_update_mode: camera_xy_only
+heading_update_mode: coupled
 pixel_correction_nis_threshold: 9.21
 state_reanchor_m: 0.0
 state_max_predict_dt_s: 1.5
