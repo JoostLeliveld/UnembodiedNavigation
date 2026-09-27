@@ -17,8 +17,8 @@ import paper as P
 from pipeline import dataset
 
 ROLES = (("D_mu", "correction training ($D_\\mu$)", "#56B4E9", "o"),
-         ("D_R", "covariance fitting ($D_R$)", "#CC79A7", "o"),
-         ("D_dev", "validation ($D_\\mathrm{val}$)", "#E69F00", "o"),
+         ("D_R", "covariance fitting ($D_R$)", "#CC79A7", "x"),
+         ("D_dev", "validation ($D_\\mathrm{val}$)", "#E69F00", "P"),
          ("final_audit", "test ($D_\\mathrm{test}$)", P.INK, "s"))
 
 
@@ -31,8 +31,12 @@ def main():
     P.draw_map(ax)
     for role, label, colour, marker in ROLES:
         xy = np.array([(x, y) for x, y, r in positions.values() if r == role])
-        ax.scatter(xy[:, 0], xy[:, 1], s=1.4 if role != "final_audit" else 3, marker=marker,
-                   c=colour, lw=0, alpha=0.6 if role != "final_audit" else 0.9, zorder=6, label=f"{label}: {counts[role]}")
+        size = {"D_mu": 1.4, "D_R": 3.0, "D_dev": 5.0, "final_audit": 3.0}[role]
+        ax.scatter(xy[:, 0], xy[:, 1], s=size, marker=marker, c=colour,
+                   lw=0.35 if role in ("D_R", "D_dev") else 0,
+                   alpha=0.6 if role == "D_mu" else 0.9,
+                   zorder=7 if role == "D_dev" else 6,
+                   label=f"{label}: {counts[role]}")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=2, fontsize=6.3, markerscale=3.0,
               handletextpad=0.2, columnspacing=1.0)
     P.save(fig, "data_collection_roles")
