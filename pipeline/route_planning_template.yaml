@@ -42,14 +42,14 @@ tasks:
     conditions: *conditions
     seeds: *seeds
     condition_overrides:
-      global_removal: &remove_e {manager_camera_ids: 'camera_A,camera_B,camera_C,camera_D', camera_network_active_camera_ids: 'camera_A,camera_B,camera_C,camera_D', removed_camera_id: camera_E}
-      per_camera_removal: *remove_e
-      spatial_removal: *remove_e
+      global_removal: &remove_d {manager_camera_ids: 'camera_A,camera_B,camera_C,camera_E', camera_network_active_camera_ids: 'camera_A,camera_B,camera_C,camera_E', removed_camera_id: camera_D}
+      per_camera_removal: *remove_d
+      spatial_removal: *remove_d
   thesis10_camera_e_long_cross_warehouse_detour:
     conditions: *conditions
     seeds: *seeds
     condition_overrides:
-      global_removal: *remove_e
+      global_removal: &remove_e {manager_camera_ids: 'camera_A,camera_B,camera_C,camera_D', camera_network_active_camera_ids: 'camera_A,camera_B,camera_C,camera_D', removed_camera_id: camera_E}
       per_camera_removal: *remove_e
       spatial_removal: *remove_e
 perception_backend: yolo
@@ -122,7 +122,7 @@ optimizer_route_seed_mode: explicit
 global_optimizer_multistart: true
 optimizer_multistart: true
 optimizer_multistart_include_direct: false
-optimizer_maxiter: 60
+optimizer_maxiter: 200
 optimizer_maxfun: 500
 optimizer_ftol: 1.0e-06
 optimizer_gtol: 1.0e-05

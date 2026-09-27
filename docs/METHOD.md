@@ -828,3 +828,17 @@ Decided by the author after the v10 audit was opened.
   [0.975, 7.25]] replaces `middle_connector`, `upper_crossing` and `west_vertical`. The other
   seeds are unchanged. Routes are re-solved.
 
+## Amendment 2026-09-27: task B start in the aisle, task E drops camera D, route budget 200
+
+- **Why.** Re-solved with the encoder-model Q and centred seeds, task B no longer changed route
+  for any model (all six took the lower crossing), and task E never did (camera E removed).
+- **Task B.** Start (-6.95, -3.0) facing north, inside the x = -6.95 aisle: the furthest north
+  point passing the task-visibility rule without camera C (camera A, 1.00). North of y = -2.5
+  only camera C sees the aisle, so after the removal the shorter north route (about 20.9 m
+  against 23.7 m south) runs blind. Seeds start from the new position.
+- **Task E.** Drops camera D instead of camera E; start and goal pass the rule without D
+  (camera E 1.00, camera C 1.00). E-long still drops camera E.
+- **Route solve budget.** `optimizer_maxiter` 60 -> 200 in the route-planning template only
+  (20 of 30 refinements stopped at 60 iterations or abnormally). A budget, not an objective
+  change; execution unchanged.
+

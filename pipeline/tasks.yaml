@@ -12,16 +12,16 @@ tasks:
     - name: west_middle_aisle
       waypoints: [[-6.95, 8.55], [-6.95, -8.5], [-7.6, -8.5]]
   - name: thesis10_camera_b_cross_warehouse_detour
-    description: Three cross-warehouse routes testing the detour induced by removing camera C (B/C dropout swap, 2026-09-26). The start faces north where cameras B, C and E see the robot, so the removal arms can confirm the start belief. The goal is the first point on its lane (x = 0.975, scanned south from the former goal (0.975, 8.625)) that a camera other than C sees in at least 90% of the captured views within 0.75 m (task-visibility rule, pipeline/check_task_visibility.py).
-    start: {x: -7.6, y: -7.5, z: 0.05, yaw: 1.5708}
+    description: Three cross-warehouse routes testing the detour induced by removing camera C (B/C dropout swap, 2026-09-26). The start (2026-09-27) lies in the x = -6.95 aisle facing north, the furthest north point that passes the task-visibility rule without camera C (camera A); north of y = -2.5 only camera C sees the aisle, so the shorter north route is blind after the removal. The goal is the first point on its lane (x = 0.975, scanned south from the former goal (0.975, 8.625)) that a camera other than C sees in at least 90% of the captured views within 0.75 m (task-visibility rule, pipeline/check_task_visibility.py).
+    start: {x: -6.95, y: -3.0, z: 0.05, yaw: 1.5708}
     goal: {x: 0.975, y: 7.25}
     route_seeds:
     - name: south_crossing
-      waypoints: [[-7.6, -6.25], [0.975, -6.25], [0.975, 7.25]]
+      waypoints: [[-6.95, -6.25], [0.975, -6.25], [0.975, 7.25]]
     - name: lower_crossing
-      waypoints: [[-7.6, -5.75], [0.975, -5.75], [0.975, 7.25]]
+      waypoints: [[-6.95, -5.75], [0.975, -5.75], [0.975, 7.25]]
     - name: middle_aisle_north
-      waypoints: [[-6.95, -7.5], [-6.95, 8.625], [0.975, 8.625], [0.975, 7.25]]
+      waypoints: [[-6.95, 8.625], [0.975, 8.625], [0.975, 7.25]]
   - name: thesis10_camera_c_inner_warehouse_detour
     description: Two equal-length routes testing the detour induced by removing camera B (B/C dropout swap, 2026-09-26). The middle aisle (x = -3.05) is seen by camera B only; the covered alternative runs east along the top lane and down the x = 0.975 lane. Start and goal were chosen by pipeline/search_dropout_tasks.py (2026-09-27) so that every model prefers the aisle with all cameras and only an information difference can move the choice; both pass the task-visibility rule without camera B.
     start: {x: -3.05, y: 8.625, z: 0.05, yaw: -1.5708}
@@ -32,7 +32,7 @@ tasks:
     - name: north_east_lanes
       waypoints: [[0.975, 8.625], [0.975, -5.75]]
   - name: thesis10_camera_e_eastern_detour
-    description: Three equal-length eastern routes testing the local detour induced by removing camera E.
+    description: Three equal-length eastern routes testing the local detour induced by removing camera D (changed from camera E on 2026-09-27, where no model changed route). The task name keeps its original letter.
     start: {x: 10.6, y: -1.175, z: 0.05, yaw: 3.1416}
     goal: {x: 0.975, y: 8.625}
     route_seeds:

@@ -54,17 +54,20 @@ tasks:
     conditions: *id002
     seeds: *id003
     condition_overrides:
-      global_removal: &id006
-        manager_camera_ids: camera_A,camera_B,camera_C,camera_D
-        camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_D
-        removed_camera_id: camera_E
-      per_camera_removal: *id006
-      spatial_removal: *id006
+      global_removal: &remove_d
+        manager_camera_ids: camera_A,camera_B,camera_C,camera_E
+        camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_E
+        removed_camera_id: camera_D
+      per_camera_removal: *remove_d
+      spatial_removal: *remove_d
   thesis10_camera_e_long_cross_warehouse_detour:
     conditions: *id002
     seeds: *id003
     condition_overrides:
-      global_removal: *id006
+      global_removal: &id006
+        manager_camera_ids: camera_A,camera_B,camera_C,camera_D
+        camera_network_active_camera_ids: camera_A,camera_B,camera_C,camera_D
+        removed_camera_id: camera_E
       per_camera_removal: *id006
       spatial_removal: *id006
 perception_backend: yolo
