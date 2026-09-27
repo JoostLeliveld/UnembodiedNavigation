@@ -804,6 +804,10 @@ Decided by the author after the v10 audit was opened.
   covariance models). A look-ahead variant (heading corrected only if >= 4 of the next 5
   frames follow) removed most of that damage but stayed behind odometry heading. Re-evaluate
   on runs with the new wheel errors.
+  Replayed again with the encoder-model Q (`--encoder-q`): coupling improves heading while
+  cameras see the robot but still roughly doubles the median cross-track error after coverage
+  ends; tails are close for the look-ahead variant. Absolute coverage there is not meaningful
+  (old-world odometry against new-world Q).
 - **Gate.** The tighter belief rejects more camera batches, almost all right after an update
   and mostly measurements far outside their own R (`gate_analysis.py`), largest near camera C.
 - **Reruns required.** Routes re-solved, full campaign. Thesis text: appendix noise table and

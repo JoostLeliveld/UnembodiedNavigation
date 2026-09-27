@@ -1600,6 +1600,7 @@ class UnicyclePlannerNode(Node):
             self.odom_vel = np.array([v_odom, w_odom], dtype=float)
             if getattr(self, '_odom_origin_stamp_s', None) is None:
                 self._odom_origin_stamp_s = float(stamp_s)
+            self._accumulate_odometry_heading_variance(float(stamp_s), float(v_odom), float(w_odom))
             self._odom_log.append((stamp_s, v_odom, w_odom))
             if pose_available:
                 self._odom_heading_log.append((stamp_ns, yaw))
@@ -2381,8 +2382,37 @@ class UnicyclePlannerNode(Node):
             return NONINFORMATIVE_YAW_VAR
         if not math.isfinite(elapsed_s) or elapsed_s < 0.0:
             return NONINFORMATIVE_YAW_VAR
-        drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
+        log = getattr(self, '_odom_heading_var_log', None)
+        if log and len(log) > 1:
+            ts, vs = zip(*log)
+            drift_var = float(np.interp(float(origin) + elapsed_s, ts, vs))
+        else:
+            drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
         return float(min(NONINFORMATIVE_YAW_VAR, max(floor_var, drift_var)))
+
+    def _accumulate_odometry_heading_variance(self, stamp_s, v, w) -> None:
+        """Integrate the heading PSD of the process-noise model along the odometry.
+
+        With the encoder model the heading PSD depends on the measured (v, w), so the
+        odometry-heading variance is the integral of sigma_w^2(v, w) since odometry began,
+        the same quantity the prediction step accumulates. The constant model reduces to
+        process_noise_theta^2 * t.
+        """
+        log = getattr(self, '_odom_heading_var_log', None)
+        if log is None:
+            self._odom_heading_var_log = log = [(float(stamp_s), 0.0)]
+            return
+        t_prev, var_prev = log[-1]
+        dt = float(stamp_s) - t_prev
+        if not math.isfinite(dt) or dt <= 0.0:
+            return
+        psd = getattr(getattr(self, 'planner', None), 'process_noise_psd', None)
+        if psd is not None:
+            from planning.core.encoder_noise_model import encoder_psd
+            rate = float(encoder_psd(v, w, psd)[1])
+        else:
+            rate = float(self.process_noise_theta) ** 2
+        log.append((float(stamp_s), var_prev + rate * dt))
 
     def _odometry_heading_variance_or(self, stamp_msg, fallback) -> float:
         """The odometry-heading variance to commit in camera_xy_only mode.

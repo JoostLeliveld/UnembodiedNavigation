@@ -816,3 +816,20 @@ def test_schema1_envelope_retains_legacy_reanchor_semantics():
     )
 
     assert _correction_envelope_allows_reanchor({"schema_version": 1}) is True
+
+
+def test_odometry_heading_variance_follows_the_encoder_model():
+    """Heading variance accumulates sigma_w^2(v, w) along the odometry, not q^2 * t."""
+    from planning.core.encoder_noise_model import ENCODER_PSD, encoder_psd
+    node = make_state_node()
+    node.planner.process_noise_psd = dict(ENCODER_PSD)
+    node._odom_origin_stamp_s = 0.0
+    node._odom_heading_var_log = None
+    for k in range(501):                    # 10 s at 50 Hz: 5 s straight, 5 s turning
+        t = 0.02 * k
+        node._accumulate_odometry_heading_variance(t, 0.8, 0.0 if t <= 5.0 + 1e-9 else 0.5)
+    straight = encoder_psd(0.8, 0.0)[1] * 5.0
+    turning = encoder_psd(0.8, 0.5)[1] * 5.0
+    assert node._map_frame_heading_variance(stamp(5.0)) == pytest.approx(
+        max(np.radians(0.5) ** 2, straight), rel=1e-3)
+    assert node._map_frame_heading_variance(stamp(10.0)) == pytest.approx(straight + turning, rel=1e-3)

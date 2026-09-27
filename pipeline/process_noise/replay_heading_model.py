@@ -41,6 +41,8 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'src/planning'))
+from planning.core.encoder_noise_model import ENCODER_PSD  # noqa: E402
+PSD = None
 from planning.core.dynamics import unicycle_jacobian, unicycle_process_noise, unicycle_step  # noqa: E402
 
 GATE = 9.21
@@ -98,7 +100,7 @@ def replay(exp: pathlib.Path, mode: str) -> pd.DataFrame:
             dt = min(t_to, nxt, t + SUB_DT) - t
             u = np.array([ov[i], ow[i]])
             F = unicycle_jacobian(m, u, dt)
-            Q = unicycle_process_noise(qxy, qth, dt, theta=float(m[2]), v=float(u[0]), base_dt=base_dt)
+            Q = unicycle_process_noise(qxy, qth, dt, theta=float(m[2]), v=float(u[0]), base_dt=base_dt, w=float(u[1]), psd=PSD)
             m = np.asarray(unicycle_step(m, u, dt), dtype=float)
             P = F @ P @ F.T + Q
             t += dt
@@ -108,8 +110,13 @@ def replay(exp: pathlib.Path, mode: str) -> pd.DataFrame:
     m = np.array(json.loads(first.posterior_mean), dtype=float)
     P = np.array(json.loads(first.posterior_covariance), dtype=float)
 
+    if PSD is not None:   # accumulated sigma_w^2(v, w) along the odometry, as the node does
+        from planning.core.encoder_noise_model import encoder_psd
+        rate = encoder_psd(ov, ow, PSD)[1]
+        cumvar = np.concatenate([[0.0], np.cumsum(rate[1:] * np.diff(ot))])
     def odom_heading_var(t):
-        return min(np.pi ** 2, max(np.radians(0.5) ** 2, qth ** 2 * (t - odom_origin)))
+        v = (float(np.interp(t, ot, cumvar)) if PSD is not None else qth ** 2 * (t - odom_origin))
+        return min(np.pi ** 2, max(np.radians(0.5) ** 2, v))
 
     if mode in ('xy_consistent', 'coupled_every', 'coupled_confirm', 'coupled_lookahead'):
         P[:2, 2] = P[2, :2] = 0.0
@@ -213,10 +220,12 @@ if __name__ == '__main__':
     ap.add_argument('--q-theta', type=float, default=None, help='override process_noise_theta')
     ap.add_argument('--modes', nargs='+', default=['xy_only', 'coupled'])
     ap.add_argument('--tag', default='')
+    ap.add_argument('--encoder-q', action='store_true')
     ap.add_argument('--coupled-period', type=float, default=1.0)
     ap.add_argument('only', nargs='*', help='optional run_dir substrings')
     args = ap.parse_args()
     Q_THETA_OVERRIDE = args.q_theta
+    PSD = ENCODER_PSD if args.encoder_q else None
     COUPLED_PERIOD_S = args.coupled_period
     runs = pd.read_csv(REPO / 'logs/thesis/analysis/runs.csv')
     parts = []
