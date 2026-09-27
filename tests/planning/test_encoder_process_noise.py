@@ -91,3 +91,22 @@ def test_set_q_covers_the_encoder_drift(profile):
         assert pos >= 0.93, (profile, (i + 1) * dt, pos)
         assert head >= 0.93, (profile, (i + 1) * dt, head)
     print(profile, {round((i + 1) * dt): tuple(round(x, 3) for x in c) for i, c in checks.items()})
+
+
+def test_campaign_templates_run_the_modelled_encoder_noise():
+    """The campaign must run the noise Q is set from (the runner has its own fallbacks)."""
+    import pathlib
+    import yaml
+    root = pathlib.Path(__file__).resolve().parents[2] / 'pipeline'
+    for name in ('execution_template.yaml', 'route_planning_template.yaml'):
+        cfg = yaml.safe_load((root / name).read_text())
+        assert cfg['process_noise_model'] == 'encoder'
+        assert cfg['encoder_noise_linear_slip_mean'] == 0.0
+        assert cfg['encoder_noise_linear_slip_std'] == enm.LINEAR_SLIP_STD
+        assert cfg['encoder_noise_angular_slip_mean'] == 0.0
+        assert cfg['encoder_noise_angular_slip_std'] == enm.ANGULAR_SLIP_STD
+        assert cfg['encoder_noise_linear_additive_std'] == enm.LINEAR_ADDITIVE_STD
+        assert cfg['encoder_noise_angular_additive_std'] == enm.ANGULAR_ADDITIVE_STD
+        assert cfg['encoder_noise_correlation_alpha'] == enm.SLIP_ALPHA
+        assert cfg['encoder_wheel_diameter_ratio_error'] == enm.WHEEL_DIAMETER_RATIO_ERROR
+        assert cfg['encoder_wheelbase_ratio'] == pytest.approx(enm.WHEELBASE_RATIO, abs=1e-6)
