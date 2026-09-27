@@ -778,3 +778,34 @@ Decided by the author after the v10 audit was opened.
 - **Choice.** Start (-3.05, 8.625) facing south, goal (0.975, -5.75), seeds `middle_aisle` and
   `north_east_lanes`, equal length (18.4 m), start and goal seen by C / A in 100% of views.
   Solved routes: middle_aisle for five conditions, north_east_lanes for spatial_removal.
+
+## Amendment 2026-09-27: one heading variance, encoder from true motion, Q set from its noise
+
+- **Finding.** Split by time since the last accepted camera update, the belief was far too
+  wide in camera-free stretches while pooled coverage looked calibrated
+  (`pipeline/process_noise/replay_heading_model.py` reproduces the logged belief).
+- **Estimator bug (code).** In camera_xy_only the committed record kept the initial heading
+  prior plus accumulated Q while the read-out reported only the odometry-heading variance;
+  prediction turned the record value into cross-track uncertainty. The record now holds the
+  same odometry-heading variance (`_odometry_heading_variance_or`). Test:
+  `test_camera_xy_only_commit_uses_the_odometry_heading_variance`.
+- **Simulated odometry.** The DiffDrive odometry already carried Gazebo's own wheel-floor slip
+  (measured, undescribed by any parameter). The encoder now starts from true body velocity and
+  adds only the declared noise, plus systematic wheel errors from UMBmark (TRC LabMate:
+  D_R/D_L 1.00121, wheelbase 337.2/340 mm). The realised drift of the previous setting was
+  measured at 0.98 % of distance and 0.76 deg per 90 deg turned (median).
+- **Q.** Set, not fitted: the white-noise equivalent of that encoder noise in the IWAI
+  continuous-time derivation, with input-dependent PSDs (PROCESS_NOISE.md). Planner and
+  estimator use the same Q; the planner predicts the estimator's belief, whose growth is the
+  encoder noise.
+- **Heading.** Heading from odometry; camera updates correct position. Coupled heading was
+  tested offline on the campaign runs: better inside camera coverage, worse after it ends,
+  because the camera error drifts with the view as the robot nears a coverage edge (all three
+  covariance models). A look-ahead variant (heading corrected only if >= 4 of the next 5
+  frames follow) removed most of that damage but stayed behind odometry heading. Re-evaluate
+  on runs with the new wheel errors.
+- **Gate.** The tighter belief rejects more camera batches, almost all right after an update
+  and mostly measurements far outside their own R (`gate_analysis.py`), largest near camera C.
+- **Reruns required.** Routes re-solved, full campaign. Thesis text: appendix noise table and
+  the "ideal odometry" sentence, the Q appendix line, the initial heading prior and the
+  heading statement in the estimator section.

@@ -11,8 +11,15 @@ velocity for its EKF predict step, making the belief diverge from truth
 whenever camera observations stop arriving.
 
 Topic wiring:
-  /odom          <- Gazebo (truth of actual motion, already includes actuation slip)
+  /odom          <- Gazebo DiffDrive odometry (input_source 'odometry')
+  /ground_truth_tf <- Gazebo world poses (input_source 'ground_truth', the default)
   /odom_noisy    -> consumed by the planner's predict step and heading correction
+
+The DiffDrive odometry integrates the wheel joints, so the simulated wheel-floor
+slip already corrupts it, by an amount no parameter describes. With input_source
+'ground_truth' the encoder starts from the true body velocity instead, and the
+noise declared here (slip, additive noise, systematic wheel errors) is the only
+odometry error: the filter's process noise can then be set from this model.
 """
 
 import math
@@ -24,11 +31,13 @@ try:  # Keep covariance propagation importable for non-ROS analysis/tests.
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.time import Time
+    from tf2_msgs.msg import TFMessage
 except ImportError:  # pragma: no cover - runtime launch always supplies ROS.
     rclpy = None
     Odometry = Any
     Node = object
     Time = Any
+    TFMessage = Any
 
 
 def _wrap_angle(a: float) -> float:
@@ -37,6 +46,36 @@ def _wrap_angle(a: float) -> float:
     while a < -math.pi:
         a += 2.0 * math.pi
     return a
+
+
+def systematic_wheel_velocities(v: float, w: float, diameter_ratio_error: float,
+                                wheelbase_ratio: float, wheel_separation_m: float):
+    """Body velocities the encoders report for a robot with systematic wheel errors.
+
+    First-order differential-drive kinematics with right/left wheel diameters
+    D(1 + e/2) and D(1 - e/2) and a true wheelbase rho times the nominal one, while the
+    odometry assumes equal diameters and the nominal wheelbase b:
+        v_enc = v - (e b / 4) w,     w_enc = rho w - (e / b) v.
+    The two errors are the ones UMBmark isolates (Borenstein & Feng): unequal wheel
+    diameters bend straight driving, a wrong wheelbase scales every turn.
+    """
+    b = float(wheel_separation_m)
+    e = float(diameter_ratio_error)
+    return (v - 0.25 * e * b * w, float(wheelbase_ratio) * w - e * v / b)
+
+
+def body_velocity_from_poses(x0: float, y0: float, th0: float,
+                            x1: float, y1: float, th1: float, dt: float):
+    """True forward and angular velocity between two consecutive world poses.
+
+    Forward speed is the displacement projected on the mean heading; the angular
+    rate is the wrapped heading change. Exact for a unicycle at constant (v, w)
+    to second order in dt.
+    """
+    dth = math.atan2(math.sin(th1 - th0), math.cos(th1 - th0))
+    mid = th0 + 0.5 * dth
+    v = ((x1 - x0) * math.cos(mid) + (y1 - y0) * math.sin(mid)) / dt
+    return v, dth / dt
 
 
 def _yaw_from_quaternion(q) -> float:
@@ -85,6 +124,20 @@ class EncoderNoiseNode(Node):
 
         # AR(1) temporal correlation of the slip state.
         self.declare_parameter('correlation_alpha', 0.80)
+        # 'ground_truth': true body velocity from /ground_truth_tf (see module docstring);
+        # 'odometry': the DiffDrive wheel odometry on input_topic.
+        self.declare_parameter('input_source', 'ground_truth')
+        self.declare_parameter('ground_truth_topic', '/ground_truth_tf')
+        self.declare_parameter('ground_truth_child_frame_id', 'turtlebot3')
+        # The declared noise is per encoder sample at 50 Hz; ground truth arrives faster, so
+        # it is decimated to this period (a faster rate would change the noise density).
+        self.declare_parameter('encoder_period_s', 0.02)
+        # Systematic wheel errors (a property of the robot, not random per run):
+        # right/left diameter mismatch e and true/nominal wheelbase ratio. Zero and one
+        # reproduce the previous, systematically calibrated encoder.
+        self.declare_parameter('wheel_diameter_ratio_error', 0.0)
+        self.declare_parameter('wheelbase_ratio', 1.0)
+        self.declare_parameter('wheel_separation_m', 0.44)
 
         # Deadband: do not inject drift on a hard stop command.
         self.declare_parameter('stop_linear_deadband', 1e-4)
@@ -122,6 +175,11 @@ class EncoderNoiseNode(Node):
         self.angular_slip_mean = float(self.get_parameter('angular_slip_mean').value)
         self.angular_slip_std = max(0.0, float(self.get_parameter('angular_slip_std').value))
         self.linear_additive_std = max(0.0, float(self.get_parameter('linear_additive_std').value))
+        self.wheel_diameter_ratio_error = float(self.get_parameter('wheel_diameter_ratio_error').value)
+        self.wheelbase_ratio = float(self.get_parameter('wheelbase_ratio').value)
+        self.wheel_separation_m = float(self.get_parameter('wheel_separation_m').value)
+        if self.wheel_separation_m <= 0.0 or self.wheelbase_ratio <= 0.0:
+            raise ValueError('wheel_separation_m and wheelbase_ratio must be positive')
         self.angular_additive_std = max(0.0, float(self.get_parameter('angular_additive_std').value))
         self.correlation_alpha = min(max(float(self.get_parameter('correlation_alpha').value), 0.0), 0.999)
         self.stop_linear_deadband = max(0.0, float(self.get_parameter('stop_linear_deadband').value))
@@ -162,10 +220,20 @@ class EncoderNoiseNode(Node):
         self._linear_scale_jacobian = [0.0, 0.0, 0.0]
 
         self._pub = self.create_publisher(Odometry, output_topic, 10)
-        self.create_subscription(Odometry, input_topic, self._odom_cb, 10)
+        self.input_source = str(self.get_parameter('input_source').value).strip().lower()
+        if self.input_source not in ('ground_truth', 'odometry'):
+            raise ValueError("input_source must be 'ground_truth' or 'odometry'")
+        self._gt_child = str(self.get_parameter('ground_truth_child_frame_id').value)
+        self._gt_prev = None
+        self.encoder_period_ns = int(round(float(self.get_parameter('encoder_period_s').value) * 1e9))
+        if self.input_source == 'odometry':
+            self.create_subscription(Odometry, input_topic, self._odom_cb, 10)
+        else:
+            self.create_subscription(TFMessage, str(self.get_parameter('ground_truth_topic').value),
+                                     self._ground_truth_cb, 50)
 
         self.get_logger().info(
-            f'Encoder noise node: {input_topic} -> {output_topic}, enabled={self.enabled}, '
+            f'Encoder noise node: {self.input_source}:{input_topic if self.input_source == "odometry" else self.get_parameter("ground_truth_topic").value} -> {output_topic}, enabled={self.enabled}, '
             f'seed={seed}, lin_slip_mean={self.linear_slip_mean:.3f}, '
             f'lin_slip_std={self.linear_slip_std:.3f}, '
             f'ang_slip_std={self.angular_slip_std:.3f}, '
@@ -259,6 +327,38 @@ class EncoderNoiseNode(Node):
         twist_cov[35] = max(var_w, self.covariance_floor_yaw_rad2)
         message.twist.covariance = twist_cov
 
+    def _ground_truth_cb(self, msg) -> None:
+        """Turn two consecutive true poses into an odometry sample for _odom_cb.
+
+        The bridge leaves the per-transform stamps at zero, so the sample is stamped
+        at receipt on the simulation clock, as the experiment logger does.
+        """
+        for tr in msg.transforms:
+            if tr.child_frame_id != self._gt_child:
+                continue
+            q = tr.transform.rotation
+            x, y = float(tr.transform.translation.x), float(tr.transform.translation.y)
+            th = float(_yaw_from_quaternion(q))
+            now_ns = int(self.get_clock().now().nanoseconds)
+            prev = self._gt_prev
+            period = getattr(self, 'encoder_period_ns', 20_000_000)
+            if prev is not None and now_ns - prev[0] < period:
+                return                      # decimate to the encoder rate
+            self._gt_prev = (now_ns, x, y, th)
+            if prev is None:
+                return
+            v, w = body_velocity_from_poses(prev[1], prev[2], prev[3], x, y, th,
+                                            (now_ns - prev[0]) * 1e-9)
+            out = Odometry()
+            out.header.stamp = Time(nanoseconds=now_ns).to_msg()
+            out.header.frame_id = self.input_frame_id
+            out.child_frame_id = self.input_child_frame_id
+            out.pose.pose.position.x, out.pose.pose.position.y = x, y
+            out.pose.pose.orientation = q
+            out.twist.twist.linear.x, out.twist.twist.angular.z = v, w
+            self._odom_cb(out)
+            return
+
     def _odom_cb(self, msg: Odometry) -> None:
         """Integrate one encoder interval, or leave every field untouched.
 
@@ -343,11 +443,14 @@ class EncoderNoiseNode(Node):
         else:
             v_mult = max(0.0, 1.0 - self.linear_slip_mean + self._linear_slip_state)
             w_mult = 1.0 - self.angular_slip_mean + self._angular_slip_state
-            v_enc = v_true * v_mult + self._rng.gauss(0.0, self.linear_additive_std)
+            v_sys, w_sys = systematic_wheel_velocities(
+                v_true, w_true, getattr(self, 'wheel_diameter_ratio_error', 0.0),
+                getattr(self, 'wheelbase_ratio', 1.0), getattr(self, 'wheel_separation_m', 0.44))
+            v_enc = v_sys * v_mult + self._rng.gauss(0.0, self.linear_additive_std)
             # Angular encoder error also fires when the robot is turning with v=0.
             moving = (abs(v_true) > self.stop_linear_deadband
                       or abs(w_true) > self.stop_angular_deadband)
-            w_enc = (w_true * w_mult + self._rng.gauss(0.0, self.angular_additive_std)
+            w_enc = (w_sys * w_mult + self._rng.gauss(0.0, self.angular_additive_std)
                      if moving else w_true)
 
         # Propagate covariance before applying the mean motion so its Jacobian

@@ -201,6 +201,7 @@ class UnicyclePlannerBase:
         # locked constants do not apply to it. Defaults True so a caller that
         # forgets is still checked. See docs/PLANNER.md.
         enforce_planner_lock=True,
+        process_noise_model='encoder',
     ):
         self.enforce_planner_lock = bool(enforce_planner_lock)
         self.horizon = int(horizon)
@@ -266,12 +267,20 @@ class UnicyclePlannerBase:
                 'terminal_risk_only is on: the locked method uses normalized '
                 'running risk. See docs/PLANNER.md',
                 RuntimeWarning, stacklevel=2)
-        if _enforce_lock and abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
+        self.process_noise_model = str(process_noise_model).strip().lower()
+        if self.process_noise_model not in ('encoder', 'constant_psd'):
+            raise ValueError("process_noise_model must be 'encoder' or 'constant_psd'")
+        # 'encoder': Q set from the simulated encoder noise (docs/PROCESS_NOISE.md); the
+        # constant process_noise_xy/theta below are then unused and not lock-checked.
+        from planning.core.encoder_noise_model import ENCODER_PSD
+        self.process_noise_psd = dict(ENCODER_PSD) if self.process_noise_model == 'encoder' else None
+        _constant_q = self.process_noise_psd is None
+        if _enforce_lock and _constant_q and abs(float(process_noise_xy) - _LOCKED_PROCESS_NOISE_XY) > 1e-9:
             warnings.warn(
                 f'process_noise_xy={float(process_noise_xy)} overrides the locked '
                 f'value {_LOCKED_PROCESS_NOISE_XY}; see docs/PROCESS_NOISE.md',
                 RuntimeWarning, stacklevel=2)
-        if _enforce_lock and abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
+        if _enforce_lock and _constant_q and abs(float(process_noise_theta) - _LOCKED_PROCESS_NOISE_THETA) > 1e-9:
             warnings.warn(
                 f'process_noise_theta={float(process_noise_theta)} overrides the locked '
                 f'value {_LOCKED_PROCESS_NOISE_THETA}; see docs/PROCESS_NOISE.md',
@@ -635,19 +644,20 @@ class UnicyclePlannerBase:
             # Launch wrappers can close stdout while planner work is still running.
             pass
 
-    def process_noise(self, dt=None, theta=None, v=None):
+    def process_noise(self, dt=None, theta=None, v=None, w=None):
         step_dt = self.dt if dt is None else float(dt)
         return unicycle_process_noise(
             self.process_noise_xy, self.process_noise_theta, step_dt,
             theta=theta, v=v, base_dt=self.dt,
             coherent_drift=getattr(self, 'coherent_drift', False),
+            w=w, psd=getattr(self, 'process_noise_psd', None),
         )
 
     def predict(self, m, S, u, dt=None):
         step_dt = self.dt if dt is None else float(dt)
         m_next = unicycle_step(m, u, step_dt)
         F = unicycle_jacobian(m, u, step_dt)
-        Q = self.process_noise(step_dt, theta=float(m[2]), v=float(u[0]))
+        Q = self.process_noise(step_dt, theta=float(m[2]), v=float(u[0]), w=float(u[1]))
         S_next = F @ S @ F.T + Q
         return m_next, S_next
 
@@ -1350,6 +1360,7 @@ class UnicyclePlannerBase:
             tuple(self.camera_network.signature) if self.camera_network is not None else (),
             float(self.process_noise_xy),
             float(self.process_noise_theta),
+            tuple(sorted((getattr(self, 'process_noise_psd', None) or {}).items())),
             tuple(np.asarray(self.camera.H, dtype=float).reshape(-1)),
             tuple(np.asarray(self.R_visible, dtype=float).reshape(-1)),
             tuple(np.asarray(self.R_miss, dtype=float).reshape(-1)),
@@ -1447,6 +1458,7 @@ class UnicyclePlannerBase:
                 discount_gamma=float(self.discount_gamma),
                 process_noise_xy=float(self.process_noise_xy),
                 process_noise_theta=float(self.process_noise_theta),
+                process_noise_psd=getattr(self, 'process_noise_psd', None),
                 visibility_sigma_kappa=float(self.visibility_sigma_kappa),
                 goal_prior_u_std_start=float(self.goal_prior_u_std_start),
                 goal_prior_v_std_start=float(self.goal_prior_v_std_start),

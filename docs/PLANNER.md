@@ -191,7 +191,7 @@ quadratic, so it is continuous and C1 at contact.
 | `network_goal_std_m` | 0.35 | **0.10** | preferred position standard deviation used by EFE risk. This is deliberately separate from the 0.35 m terminal arrival tolerance. |
 | `network_goal_std_start_m` | none | **5.0** | anneal start; see above. |
 | `kouw_et1_ambiguity` | false | **true** | the thesis method. |
-| `process_noise_xy` / `_theta` | 0.01 / 0.02 | **0.02 / 0.08** | conservatively bounds the simulated drift; see PROCESS_NOISE.md. |
+| `process_noise_model` | constant_psd | **encoder** | Q set from the simulated encoder noise; see PROCESS_NOISE.md. `process_noise_xy` / `_theta` 0.02 / 0.08 apply to the legacy constant model only. |
 
 `camera_network_objective: metric_expected_belief` must be set PER CAMPAIGN — it
 is the objective that loads the per-camera planner fields. Canonical Stage-09 uses

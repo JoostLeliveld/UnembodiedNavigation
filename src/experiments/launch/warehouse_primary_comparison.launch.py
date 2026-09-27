@@ -244,6 +244,10 @@ def generate_launch_description():
                               description='Stddev of additive angular encoder noise used for /odom_noisy.'),
         DeclareLaunchArgument('encoder_noise_correlation_alpha', default_value='0.80',
                               description='AR(1) correlation of encoder slip states.'),
+        DeclareLaunchArgument('encoder_wheel_diameter_ratio_error', default_value='0.00121',
+                              description='Systematic right/left wheel diameter mismatch (UMBmark LabMate).'),
+        DeclareLaunchArgument('encoder_wheelbase_ratio', default_value='0.991765',
+                              description='True/nominal wheelbase ratio (UMBmark LabMate 337.2/340).'),
         DeclareLaunchArgument('yolo_model', default_value='', description='Local path to a trained YOLO .pt model'),
         DeclareLaunchArgument(
             'outcome_journal_path', default_value='',

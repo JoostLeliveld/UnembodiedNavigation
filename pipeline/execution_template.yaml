@@ -188,8 +188,11 @@ use_command_noise: true
 use_encoder_noise: true
 # Calibrated odometry: zero mean encoder scale error (METHOD amendment 2026-09-24 evening).
 encoder_noise_linear_slip_mean: 0.0
+encoder_wheel_diameter_ratio_error: 0.00121
+encoder_wheelbase_ratio: 0.991765
 process_noise_xy: 0.02
 process_noise_theta: 0.08
+process_noise_model: encoder
 r_visible_uv: 1.0
 r_miss_uv: 40.0
 headless: true

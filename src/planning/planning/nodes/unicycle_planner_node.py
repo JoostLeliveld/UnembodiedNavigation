@@ -123,6 +123,8 @@ class UnicyclePlannerNode(Node):
         # docs/PROCESS_NOISE.md before changing either value.
         _declare_if_not('process_noise_xy', 0.02)
         _declare_if_not('process_noise_theta', 0.08)
+        # 'encoder' (default): Q set from the simulated encoder noise; 'constant_psd': legacy.
+        _declare_if_not('process_noise_model', 'encoder')
         # Frozen process-model option. Campaign manifests must state its value.
         _declare_if_not('coherent_drift', False)
 
@@ -400,6 +402,7 @@ class UnicyclePlannerNode(Node):
         self.coherent_drift = bool(self.get_parameter('coherent_drift').value)
         self.process_noise_xy = float(self.get_parameter('process_noise_xy').value)
         self.process_noise_theta = float(self.get_parameter('process_noise_theta').value)
+        self.process_noise_model = str(self.get_parameter('process_noise_model').value)
 
         self.goal_sigma_uv = float(self.get_parameter('goal_sigma_uv').value)
 
@@ -1341,7 +1344,7 @@ class UnicyclePlannerNode(Node):
             horizon=int(g('horizon')),
             dt=float(g_default('dt', self.dt)), v_min=self.v_min, v_max=self.v_max, w_min=self.w_min, w_max=self.w_max,
             control_weight=self.control_weight,
-            process_noise_xy=self.process_noise_xy, process_noise_theta=self.process_noise_theta,
+            process_noise_xy=self.process_noise_xy, process_noise_theta=self.process_noise_theta, process_noise_model=getattr(self, 'process_noise_model', 'encoder'),
             goal_sigma_uv=self.goal_sigma_uv,
             risk_weight_obs=self.risk_weight_obs, ambiguity_weight=self.ambiguity_weight,
             optimizer_maxiter=int(g('optimizer_maxiter')), optimizer_maxfun=int(g('optimizer_maxfun')),
@@ -2381,6 +2384,18 @@ class UnicyclePlannerNode(Node):
         drift_var = float(self.process_noise_theta) ** 2 * elapsed_s
         return float(min(NONINFORMATIVE_YAW_VAR, max(floor_var, drift_var)))
 
+    def _odometry_heading_variance_or(self, stamp_msg, fallback) -> float:
+        """The odometry-heading variance to commit in camera_xy_only mode.
+
+        Before the first odometry sample there is no drift origin and
+        _map_frame_heading_variance answers the non-informative pi^2; committing that
+        would turn every later prediction into metres of cross-track uncertainty, so
+        the caller's own variance is kept until odometry has started.
+        """
+        if getattr(self, '_odom_origin_stamp_s', None) is None:
+            return float(fallback)
+        return self._map_frame_heading_variance(stamp_msg)
+
     def _anchor_belief_yaw_for_planning(self, m0, S0, now_msg, *, motion_snapshot=None):
         """Heading anchor.
 
@@ -2473,6 +2488,13 @@ class UnicyclePlannerNode(Node):
             m = np.array([x0, y0, h if h is not None else wrap_angle(yaw0)], dtype=float)
             s_xy, s_th = self.initial_belief_sigma_xy_m, self.initial_belief_sigma_theta_rad
             P = np.diag([s_xy ** 2, s_xy ** 2, s_th ** 2])
+            if h is not None and getattr(self, 'heading_update_mode', 'camera_xy_only') != 'coupled':
+                # camera_xy_only: the heading mean is the map-frame odometry heading, so its
+                # variance is that heading's drift variance, the same value the read-out
+                # reports (_map_frame_heading_variance). Carrying the declared task prior
+                # here instead leaves a second, larger heading variance inside the record
+                # that prediction turns into cross-track uncertainty.
+                P[2, 2] = self._odometry_heading_variance_or(stamp, P[2, 2])
             self._commit_belief(m, self._regularize_state_covariance(P), stamp)
 
     def _reanchor_belief_to_xy(self, stamp_msg, z_xy, R, reason=""):
@@ -2841,7 +2863,11 @@ class UnicyclePlannerNode(Node):
                     motion_snapshot=outcome.snapshot.motion_snapshot if outcome.snapshot else None)
                 m[2] = float(h) if h is not None else float(outcome.m_pred[2])
                 P[:2, 2] = 0.; P[2, :2] = 0.
-                P[2, 2] = float(outcome.S_pred[2, 2])
+                # One heading model: the committed variance is the odometry-heading
+                # variance the read-out reports, not the predicted record variance,
+                # which still holds the initial prior (see _init_belief_from_task_prior).
+                P[2, 2] = (self._odometry_heading_variance_or(stamp_msg, outcome.S_pred[2, 2])
+                           if h is not None else float(outcome.S_pred[2, 2]))
             P = self._regularize_state_covariance(P)
             support_data = outcome.replay_meta.get('motion_support')
             before = outcome.snapshot.belief_record if outcome.snapshot else self._belief_record

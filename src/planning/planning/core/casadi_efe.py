@@ -87,6 +87,9 @@ class CasadiEfeParams:
     # Compare "Terminal Matters" (arXiv 2605.09046), where uncertainty enters
     # only through the terminal cost.
     terminal_risk_only: bool = False
+    # Input-dependent process-noise PSDs (encoder_noise_model.ENCODER_PSD); None keeps
+    # the constant process_noise_xy/theta PSDs.
+    process_noise_psd: object = None
 
 
 def _require_casadi():
@@ -133,11 +136,15 @@ def unicycle_jacobian_ca(state, control, dt):
     )
 
 
-def unicycle_process_noise_ca(process_noise_xy, process_noise_theta, dt, theta, v):
+def unicycle_process_noise_ca(process_noise_xy, process_noise_theta, dt, theta, v, w=None, psd=None):
     c = ca.cos(theta)
     s = ca.sin(theta)
-    sig_v2 = process_noise_xy ** 2
-    sig_w2 = process_noise_theta ** 2
+    if psd is not None:   # input-dependent PSDs, planning.core.encoder_noise_model
+        from planning.core.encoder_noise_model import encoder_psd
+        sig_v2, sig_w2 = encoder_psd(v, 0.0 if w is None else w, psd)
+    else:
+        sig_v2 = process_noise_xy ** 2
+        sig_w2 = process_noise_theta ** 2
 
     # Q_d matrix elements
     # Row 0
@@ -626,7 +633,9 @@ def visibility_aware_unicycle_efe_ca(
             params.process_noise_theta,
             params.dt,
             m_prev[2],
-            u_t[0]
+            u_t[0],
+            u_t[1],
+            params.process_noise_psd,
         )
         S = ca.mtimes([F, S, F.T]) + Q_t
 
@@ -806,7 +815,7 @@ def make_metric_network_efe_valgrad_fn(
         F = unicycle_jacobian_ca(m_prev, u_t, params.dt)
         Q_t = unicycle_process_noise_ca(
             params.process_noise_xy, params.process_noise_theta,
-            params.dt, m_prev[2], u_t[0],
+            params.dt, m_prev[2], u_t[0], u_t[1], params.process_noise_psd,
         )
         S = .5 * (F @ S @ F.T + Q_t + (F @ S @ F.T + Q_t).T)
         weight_t = params.discount_gamma ** t

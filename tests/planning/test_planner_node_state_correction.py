@@ -275,6 +275,34 @@ def test_camera_xy_only_commit_keeps_the_belief_covariance_psd():
     assert node.belief_S[2, 2] == pytest.approx(S_pred[2, 2])
 
 
+def test_camera_xy_only_commit_uses_the_odometry_heading_variance():
+    """One heading model: the committed heading variance is the one the read-out reports.
+
+    Keeping the predicted record variance instead carried the declared initial heading
+    prior through the whole run, and prediction turned it into metres of cross-track
+    uncertainty in camera-free stretches.
+    """
+    node = make_state_node()
+    node._odom_origin_stamp_s = 0.0
+    S_pred = np.diag([1.0, 1.0, 0.3])
+    outcome = bc.CorrectionOutcome(
+        reason=bc.RejectReason.ACCEPTED,
+        m_pred=np.zeros(3),
+        S_pred=S_pred,
+        next_m=np.zeros(3),
+        next_S=np.diag([0.01, 0.01, 0.10]),
+    )
+
+    node._commit_metric_correction_outcome(
+        stamp(9.95), np.diag([0.02, 0.02]), outcome
+    )
+
+    expected = node._map_frame_heading_variance(stamp(9.95))
+    assert expected < S_pred[2, 2]
+    assert node.belief_S[2, 2] == pytest.approx(expected)
+    assert np.min(np.linalg.eigvalsh(node.belief_S)) >= node.cov_eig_floor
+
+
 # --------------------------------------------------------------------------
 # The three confirmed gaps
 # --------------------------------------------------------------------------

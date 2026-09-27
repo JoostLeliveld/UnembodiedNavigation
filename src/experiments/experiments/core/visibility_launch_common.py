@@ -131,6 +131,7 @@ PAPER_LAUNCH_DEFAULTS: Dict[str, str] = {
     # docs/PROCESS_NOISE.md.
     'process_noise_xy': '0.02',
     'process_noise_theta': '0.08',
+    'process_noise_model': 'encoder',
     'optimizer_maxiter': '80',
     'optimizer_maxfun': '500',
     'optimizer_ftol': '1e-6',
@@ -275,6 +276,12 @@ _ENCODER_NOISE_ANGULAR_SLIP_STD: float = 0.075
 _ENCODER_NOISE_LINEAR_ADDITIVE_STD: float = 0.004
 _ENCODER_NOISE_ANGULAR_ADDITIVE_STD: float = 0.050
 _ENCODER_NOISE_CORRELATION_ALPHA: float = 0.80
+# Systematic wheel errors of an off-the-shelf differential-drive robot, as isolated by
+# UMBmark on a TRC LabMate (Borenstein & Feng): right/left diameter ratio 1.00121 and
+# effective wheelbase 337.2 mm against 340 mm nominal. One robot, so fixed, not per seed.
+_ENCODER_WHEEL_DIAMETER_RATIO_ERROR: float = 0.00121
+_ENCODER_WHEELBASE_RATIO: float = 337.2 / 340.0
+_ROBOT_WHEEL_SEPARATION_M: float = 0.44   # warehouse_amr.urdf.xacro wheel_sep
 
 # Sensor pixel noise — paper-locked, not user-overridable.
 _SENSOR_PIXEL_NOISE_SIGMA: float = 1.0
@@ -592,6 +599,7 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         'stuck_idle_cmd_fraction_max': float(_launch_value(context, 'stuck_idle_cmd_fraction_max', PAPER_LAUNCH_DEFAULTS['stuck_idle_cmd_fraction_max'])),
         'process_noise_xy': float(_launch_value(context, 'process_noise_xy', PAPER_LAUNCH_DEFAULTS['process_noise_xy'])),
         'process_noise_theta': float(_launch_value(context, 'process_noise_theta', PAPER_LAUNCH_DEFAULTS['process_noise_theta'])),
+        'process_noise_model': str(_launch_value(context, 'process_noise_model', PAPER_LAUNCH_DEFAULTS['process_noise_model'])),
         'optimizer_maxiter': int(_launch_value(context, 'optimizer_maxiter', PAPER_LAUNCH_DEFAULTS['optimizer_maxiter'])),
         'optimizer_maxfun': int(_launch_value(context, 'optimizer_maxfun', PAPER_LAUNCH_DEFAULTS['optimizer_maxfun'])),
         'optimizer_ftol': float(_launch_value(context, 'optimizer_ftol', PAPER_LAUNCH_DEFAULTS['optimizer_ftol'])),
@@ -898,6 +906,12 @@ def parse_common_launch_config(context) -> Dict[str, object]:
         ),
         'encoder_noise_correlation_alpha': float(
             _launch_value(context, 'encoder_noise_correlation_alpha', _ENCODER_NOISE_CORRELATION_ALPHA)
+        ),
+        'encoder_wheel_diameter_ratio_error': float(
+            _launch_value(context, 'encoder_wheel_diameter_ratio_error', _ENCODER_WHEEL_DIAMETER_RATIO_ERROR)
+        ),
+        'encoder_wheelbase_ratio': float(
+            _launch_value(context, 'encoder_wheelbase_ratio', _ENCODER_WHEELBASE_RATIO)
         ),
         'min_state_cov': float(_launch_value(context, 'min_state_cov', '1e-6')),
         'debug_runtime': _as_bool(_launch_value(context, 'debug_runtime', 'false')),
@@ -1464,6 +1478,11 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 _ENCODER_NOISE_ANGULAR_ADDITIVE_STD,
             ),
             'correlation_alpha': cfg.get('encoder_noise_correlation_alpha', _ENCODER_NOISE_CORRELATION_ALPHA),
+            'wheel_diameter_ratio_error': cfg.get(
+                'encoder_wheel_diameter_ratio_error', _ENCODER_WHEEL_DIAMETER_RATIO_ERROR),
+            'wheelbase_ratio': cfg.get('encoder_wheelbase_ratio', _ENCODER_WHEELBASE_RATIO),
+            'wheel_separation_m': _ROBOT_WHEEL_SEPARATION_M,
+            'input_source': 'ground_truth',
         }],
     )
 
@@ -1727,6 +1746,7 @@ def build_shared_nodes(cfg: Dict[str, object]) -> Dict[str, object]:
                 'control_weight': cfg['control_weight'],
                 'process_noise_xy': cfg['process_noise_xy'],
                 'process_noise_theta': cfg['process_noise_theta'],
+                'process_noise_model': cfg['process_noise_model'],
                 'optimizer_maxiter': cfg['optimizer_maxiter'],
                 'optimizer_maxfun': cfg['optimizer_maxfun'],
                 'optimizer_ftol': cfg['optimizer_ftol'],
@@ -2377,6 +2397,7 @@ def build_agent_runtime_actions(cfg: Dict[str, object]) -> List[object]:
             'debug_runtime': cfg['debug_runtime'],
             'process_noise_xy': cfg['process_noise_xy'],
             'process_noise_theta': cfg['process_noise_theta'],
+            'process_noise_model': cfg['process_noise_model'],
             'goal_sigma_uv': cfg['goal_sigma_uv'],
             'risk_weight_obs': cfg['risk_weight_obs'],
             'ambiguity_weight': cfg['ambiguity_weight'],

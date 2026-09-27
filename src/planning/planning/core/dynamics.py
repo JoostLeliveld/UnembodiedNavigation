@@ -84,7 +84,8 @@ def coherent_drift_increment(distance_before_m, distance_after_m, theta, **kwarg
 
 
 def unicycle_process_noise(process_noise_xy, process_noise_theta, dt, theta=None, v=None,
-                           base_dt=None, coherent_drift=False, distance_travelled_m=0.0):
+                           base_dt=None, coherent_drift=False, distance_travelled_m=0.0,
+                           w=None, psd=None):
     """Process noise matrix for unicycle.
 
     If theta and v are provided, uses the exact integrated analytical process noise covariance.
@@ -99,8 +100,12 @@ def unicycle_process_noise(process_noise_xy, process_noise_theta, dt, theta=None
         s = math.sin(float(theta))
         v = float(v)
         dt = float(dt)
-        sig_v2 = float(process_noise_xy) ** 2
-        sig_w2 = float(process_noise_theta) ** 2
+        if psd is not None:   # input-dependent PSDs, planning.core.encoder_noise_model
+            from planning.core.encoder_noise_model import encoder_psd
+            sig_v2, sig_w2 = encoder_psd(v, 0.0 if w is None else float(w), psd)
+        else:
+            sig_v2 = float(process_noise_xy) ** 2
+            sig_w2 = float(process_noise_theta) ** 2
 
         q00 = sig_v2 * (c ** 2) * dt + (1.0 / 3.0) * (v ** 2) * (s ** 2) * sig_w2 * (dt ** 3)
         q01 = sig_v2 * c * s * dt - (1.0 / 3.0) * (v ** 2) * c * s * sig_w2 * (dt ** 3)
