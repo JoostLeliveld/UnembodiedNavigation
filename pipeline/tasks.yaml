@@ -44,12 +44,6 @@ tasks:
       waypoints: [[10.6, 2.425], [0.975, 2.425], [0.975, 8.625]]
     - name: upper_crossing
       waypoints: [[10.6, 6.35], [0.975, 6.35], [0.975, 8.625]]
-  - name: main_aisle
-      waypoints: [[0.975, -1.175], [0.975, 8.625]]
-    - name: middle_connector
-      waypoints: [[10.6, 2.425], [0.975, 2.425], [0.975, 8.625]]
-    - name: upper_crossing
-      waypoints: [[10.6, 6.35], [0.975, 6.35], [0.975, 8.625]]
   - name: thesis10_camera_e_long_cross_warehouse_detour
     description: Three long cross-warehouse routes testing the detour induced by removing camera E.
     start: {x: -10.7, y: 8.55, z: 0.05, yaw: 0.0}
