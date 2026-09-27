@@ -813,3 +813,18 @@ Decided by the author after the v10 audit was opened.
 - **Reruns required.** Routes re-solved, full campaign. Thesis text: appendix noise table and
   the "ideal odometry" sentence, the Q appendix line, the initial heading prior and the
   heading statement in the estimator section.
+
+## Amendment 2026-09-27: route seeds centred in the x = -6.95 aisle (tasks A and B)
+
+- **Why.** The aisle between rack columns W1 and W2 is uniform over its length (racks at
+  x <= -7.85 and x >= -6.05, collision boxes grown 0.10 m), centre x = -6.95. Seeds of tasks A
+  and B switched to x = -7.275 (0.30 m clearance to the west rack) or ran at x = -7.45
+  (0.125 m), a jog inherited from February seeds with no geometric reason. Route solving is
+  seeded local refinement plus selection (L-BFGS-B, <= 60 iterations, control_weight 0), so
+  nothing in the objective removes such a jog and it reached the executed routes.
+- **Change.** One centred seed per task for that aisle: A `west_middle_aisle`
+  [[-6.95, 8.55], [-6.95, -8.5], [-7.6, -8.5]] replaces `west_middle_connector` and
+  `west_upper_crossing`; B `middle_aisle_north` [[-6.95, -7.5], [-6.95, 8.625], [0.975, 8.625],
+  [0.975, 7.25]] replaces `middle_connector`, `upper_crossing` and `west_vertical`. The other
+  seeds are unchanged. Routes are re-solved.
+
