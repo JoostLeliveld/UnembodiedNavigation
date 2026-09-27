@@ -16,10 +16,10 @@ import numpy as np
 import paper as P
 from pipeline import dataset
 
-ROLES = (("D_mu", "correction training ($D_\\mu$)", "#56B4E9", "o"),
-         ("D_R", "covariance fitting ($D_R$)", "#CC79A7", "x"),
-         ("D_dev", "validation ($D_\\mathrm{val}$)", "#E69F00", "P"),
-         ("final_audit", "test ($D_\\mathrm{test}$)", P.INK, "s"))
+ROLES = (("D_mu", "correction training ($D_\\mu$)", "#0072B2", "o"),
+         ("D_R", "covariance fitting ($D_R$)", "#B34D8C", "o"),
+         ("D_dev", "validation ($D_\\mathrm{val}$)", "#E69F00", "o"),
+         ("final_audit", "test ($D_\\mathrm{test}$)", P.INK, "o"))
 
 
 def main():
@@ -31,11 +31,8 @@ def main():
     P.draw_map(ax)
     for role, label, colour, marker in ROLES:
         xy = np.array([(x, y) for x, y, r in positions.values() if r == role])
-        size = {"D_mu": 1.4, "D_R": 3.0, "D_dev": 5.0, "final_audit": 3.0}[role]
-        ax.scatter(xy[:, 0], xy[:, 1], s=size, marker=marker, c=colour,
-                   lw=0.35 if role in ("D_R", "D_dev") else 0,
-                   alpha=0.6 if role == "D_mu" else 0.9,
-                   zorder=7 if role == "D_dev" else 6,
+        ax.scatter(xy[:, 0], xy[:, 1], s=1.6, marker=marker, c=colour,
+                   edgecolors="none", linewidths=0, alpha=0.9, zorder=6,
                    label=f"{label}: {counts[role]}")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=2, fontsize=6.3, markerscale=3.0,
               handletextpad=0.2, columnspacing=1.0)
