@@ -1,16 +1,16 @@
 tasks:
   warehouse_v2.world.sdf: &warehouse_v2_tasks
   - name: thesis10_camera_a_western_dock_detour
-    description: Three-route western dock traverse testing the detour induced by removing camera A.
-    start: {x: -10.7, y: 8.55, z: 0.05, yaw: 0.0}
-    goal: {x: -7.6, y: -8.5}
+    description: Three-route western dock traverse (start facing south along its lane and goal on the x = -6.95 aisle line since 2026-09-27, for clearance) testing the detour induced by removing camera A.
+    start: {x: -10.7, y: 8.55, z: 0.05, yaw: -1.5708}
+    goal: {x: -6.95, y: -8.5}
     route_seeds:
     - name: west_south_crossing
-      waypoints: [[-10.7, -6.25], [-7.6, -6.25], [-7.6, -8.5]]
+      waypoints: [[-10.7, -6.25], [-6.95, -6.25], [-6.95, -8.5]]
     - name: west_lower_crossing
-      waypoints: [[-10.7, -5.75], [-7.6, -5.75], [-7.6, -8.5]]
+      waypoints: [[-10.7, -5.75], [-6.95, -5.75], [-6.95, -8.5]]
     - name: west_middle_aisle
-      waypoints: [[-6.95, 8.55], [-6.95, -8.5], [-7.6, -8.5]]
+      waypoints: [[-6.95, 8.55], [-6.95, -8.5]]
   - name: thesis10_camera_b_cross_warehouse_detour
     description: Three cross-warehouse routes testing the detour induced by removing camera C (B/C dropout swap, 2026-09-26). The start (2026-09-27) lies in the x = -6.95 aisle facing north, the furthest north point that passes the task-visibility rule without camera C (camera A); north of y = -2.5 only camera C sees the aisle, so the shorter north route is blind after the removal. The goal is the first point on its lane (x = 0.975, scanned south from the former goal (0.975, 8.625)) that a camera other than C sees in at least 90% of the captured views within 0.75 m (task-visibility rule, pipeline/check_task_visibility.py).
     start: {x: -6.95, y: -3.0, z: 0.05, yaw: 1.5708}
@@ -32,11 +32,19 @@ tasks:
     - name: north_east_lanes
       waypoints: [[0.975, 8.625], [0.975, -5.75]]
   - name: thesis10_camera_e_eastern_detour
-    description: Three equal-length eastern routes testing the local detour induced by removing camera D (changed from camera E on 2026-09-27, where no model changed route). The task name keeps its original letter.
-    start: {x: 10.6, y: -1.175, z: 0.05, yaw: 3.1416}
+    description: Three equal-length eastern routes testing the local detour induced by removing camera D (changed from camera E on 2026-09-27, where no model changed route). The task name keeps its original letter. Start moved to (10.6, -5.75) facing north near camera E (2026-09-27), with a lower-crossing seed; kept as the control task.
+    start: {x: 10.6, y: -5.75, z: 0.05, yaw: 1.5708}
     goal: {x: 0.975, y: 8.625}
     route_seeds:
+    - name: lower_crossing
+      waypoints: [[0.975, -5.75], [0.975, 8.625]]
     - name: main_aisle
+      waypoints: [[10.6, -1.175], [0.975, -1.175], [0.975, 8.625]]
+    - name: middle_connector
+      waypoints: [[10.6, 2.425], [0.975, 2.425], [0.975, 8.625]]
+    - name: upper_crossing
+      waypoints: [[10.6, 6.35], [0.975, 6.35], [0.975, 8.625]]
+  - name: main_aisle
       waypoints: [[0.975, -1.175], [0.975, 8.625]]
     - name: middle_connector
       waypoints: [[10.6, 2.425], [0.975, 2.425], [0.975, 8.625]]

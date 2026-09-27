@@ -842,3 +842,13 @@ Decided by the author after the v10 audit was opened.
   (20 of 30 refinements stopped at 60 iterations or abnormally). A budget, not an objective
   change; execution unchanged.
 
+## Amendment 2026-09-27: task A start and goal for clearance, task E start as control
+
+- **Task A.** The start faced east across its 1.4 m lane (0.25 m from the west boundary) and the
+  goal x = -7.6 made the dock approach pass 0.098 m from the bin office (predicted clearance
+  0.00 m). Start now faces south along the lane (0.375 m to the boundary, 0.83 m to obstacles);
+  goal (-6.95, -8.5) on the aisle line (0.77 m to obstacles, camera B 1.00 without camera A).
+  Seeds descend at x = -6.95.
+- **Task E.** Kept as the control task (no model changes route). Start (10.6, -5.75) facing north
+  near camera E, with a lower-crossing seed; passes the rule without camera D (camera A 1.00).
+
