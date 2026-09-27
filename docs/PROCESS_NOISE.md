@@ -1,5 +1,7 @@
 # Process noise Q — SET from the simulated encoder (2026-09-27)
 
+See docs/ODOMETRY_NOISE_LOCK.md for the locked odometry, noise, Q and update setup.
+
     process_noise_model = encoder   (default; planning.core.encoder_noise_model)
     process_noise_xy / _theta = 0.02 / 0.08   (legacy 'constant_psd' model only)
 

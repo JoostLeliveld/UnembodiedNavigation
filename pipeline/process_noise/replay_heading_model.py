@@ -221,13 +221,29 @@ if __name__ == '__main__':
     ap.add_argument('--modes', nargs='+', default=['xy_only', 'coupled'])
     ap.add_argument('--tag', default='')
     ap.add_argument('--encoder-q', action='store_true')
+    ap.add_argument('--campaign-log', type=pathlib.Path, default=None,
+                    help='read runs from a campaign_log.json instead of logs/thesis/analysis/runs.csv')
     ap.add_argument('--coupled-period', type=float, default=1.0)
     ap.add_argument('only', nargs='*', help='optional run_dir substrings')
     args = ap.parse_args()
     Q_THETA_OVERRIDE = args.q_theta
     PSD = ENCODER_PSD if args.encoder_q else None
     COUPLED_PERIOD_S = args.coupled_period
-    runs = pd.read_csv(REPO / 'logs/thesis/analysis/runs.csv')
+    if args.campaign_log is not None:
+        import json as _json
+        rows = []
+        for entry in _json.loads(args.campaign_log.read_text()).values():
+            if entry.get('outcome') in (None, 'infra_invalid') or not entry.get('run_log_dir'):
+                continue
+            exp = sorted(pathlib.Path(entry['run_log_dir']).glob('experiment_*'))
+            if not exp or not (exp[0] / 'run_summary.json').exists():
+                continue
+            rows.append(dict(task=entry['task'], condition=entry['condition'], seed=entry['seed'],
+                             model=entry['condition'].rsplit('_', 1)[0], state=entry['condition'].rsplit('_', 1)[1],
+                             run_dir=str(exp[0])))
+        runs = pd.DataFrame(rows)
+    else:
+        runs = pd.read_csv(REPO / 'logs/thesis/analysis/runs.csv')
     parts = []
     for _, r in runs.iterrows():
         if not isinstance(r.run_dir, str):
