@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Analyse the camera-removal campaign: one row per run, per-arm tables, matched differences.
 
-Reads logs/thesis/campaign/seed*/campaign_log.json (the runner's ledger; the task C rerun
-under campaign/taskC_goal_rule/seed*, the task B/C camera-swap rerun under
-revisions/bc_dropout_swap/runs/seed*) and each run's
-own artifacts; writes logs/thesis/analysis/:
+Reads logs/thesis/final_campaign/campaign/seed*/campaign_log.json (the runner's canonical
+ledger) and each run's own artifacts; writes logs/thesis/final_campaign/analysis/:
   runs.csv          one row per campaign cell (5 tasks x 6 conditions x 3 seeds)
   collisions.json   the offline footprint score of every run (pipeline/score_collisions.py)
   summary.json      per-arm counts and means, and matched differences with bootstrap CIs
@@ -22,8 +20,10 @@ those pairs.
 from __future__ import annotations
 
 import csv
+import concurrent.futures
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -37,13 +37,11 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "src/unav_common")]
 from pipeline.score_collisions import DriveableRegion, read_poses, score_poses  # noqa: E402
 
-CAMPAIGN = REPO / "logs/thesis/campaign"
-ROUTES = REPO / "logs/thesis/routes"
-# Tasks B and C swap their removed camera (B removes camera C, C removes camera B) and their
-# goals moved to pass the task-visibility rule under the swap, so both tasks were rerun in all six
-# conditions with routes re-solved; those entries replace the campaign's.
-BC_SWAP = REPO / "logs/thesis/revisions/bc_dropout_swap"
-OUT = REPO / "logs/thesis/analysis"
+FINAL_ROOT = REPO / "logs/thesis/final_campaign"
+CAMPAIGN = FINAL_ROOT / "campaign"
+ROUTES = FINAL_ROOT / "routes"
+CONFIGS = FINAL_ROOT / "campaign_configs"
+OUT = FINAL_ROOT / "analysis"
 SEEDS = (91500, 91501, 91502)
 MODELS = ("global", "per_camera", "spatial")
 STATES = ("intact", "removal")
@@ -55,7 +53,7 @@ METRICS = ("success", "final_goal_distance_m", "belief_error_m", "belief_sigma_m
 
 
 def tasks() -> list[str]:
-    cfg = yaml.safe_load((REPO / "logs/thesis/campaign_configs/campaign_seed91500.yaml").read_text())
+    cfg = yaml.safe_load((CONFIGS / "campaign_seed91500.yaml").read_text())
     return list(cfg["tasks"])
 
 
@@ -84,15 +82,40 @@ def route_name(task: str, condition: str, route_sha: str, routes: Path = ROUTES)
     return result["selected_source"].split(":")[-1]
 
 
-def run_row(task: str, condition: str, seed: int, entry: dict | None, region) -> tuple[dict, dict]:
+def score_run(run_dir: str) -> tuple[str, dict]:
+    """Score one independent run in a worker process."""
+    run = Path(run_dir)
+    region = DriveableRegion.for_world()
+    return run_dir, score_poses(region, read_poses(run / "ground_truth_pose.csv"))
+
+
+def run_row(task: str, condition: str, seed: int, entry: dict | None,
+            score: dict | None) -> tuple[dict, dict]:
     model, state = split_condition(condition)
     row = {"task": task, "condition": condition, "model": model, "state": state, "seed": seed}
     if entry is None or entry.get("outcome") in (None, "infra_invalid"):
         row["outcome"] = "missing" if entry is None else "infra_invalid"
         return row, {}
+    required_entry_flags = (
+        "attempt_evidence_complete", "route_artifact_verified",
+        "correction_assimilation_verified", "detector_journal_verified",
+        "manager_journal_verified",
+    )
+    failed_flags = [name for name in required_entry_flags if entry.get(name) is not True]
+    if failed_flags or entry.get("process_returncode") != 0:
+        raise RuntimeError(
+            f"{task}/{condition}/seed{seed}: invalid campaign evidence: "
+            f"flags={failed_flags}, returncode={entry.get('process_returncode')}"
+        )
     run = Path(entry["run_dir"])
     summary = json.loads((run / "run_summary.json").read_text())
-    score = score_poses(region, read_poses(run / "ground_truth_pose.csv"))
+    if (summary.get("valid_run") is not True
+            or summary.get("evidence_complete") is not True
+            or summary.get("runtime_event_invalid_count") != 0
+            or summary.get("correction_ledger", {}).get("valid") is not True):
+        raise RuntimeError(f"{run}: run summary failed the final evidence audit")
+    if score is None:
+        raise RuntimeError(f"{run}: missing offline collision score")
     first_cmd = float(summary["first_cmd_stamp"])
     collision = bool(score["collision"])
     goal_distance = float(summary["final_goal_distance"])
@@ -103,8 +126,7 @@ def run_row(task: str, condition: str, seed: int, entry: dict | None, region) ->
     row.update({
         "outcome": entry["outcome"],
         "completion_reason": entry["completion_reason"],
-        "route": route_name(task, condition, entry["preselected_route_sha256"],
-                            BC_SWAP / "routes" if run.is_relative_to(BC_SWAP) else ROUTES),
+        "route": route_name(task, condition, entry["preselected_route_sha256"], ROUTES),
         "success": int(success),
         "failure": ("" if success else "collision" if collision else
                     "goal_distance" if stopped else entry["outcome"]),
@@ -207,46 +229,49 @@ def plot_trajectories(rows: list[dict], task_names: list[str]) -> None:
     plt.close(fig)
 
 
-LOG_ROOTS = (CAMPAIGN, CAMPAIGN / "taskC_goal_rule", BC_SWAP / "runs")
-
-
 def source_identities() -> dict:
     """The commit and config each log root's runner froze, per seed."""
     out = {}
-    for root in LOG_ROOTS:
-        for seed in SEEDS:
-            path = root / f"seed{seed}/source_snapshot/source_identity.json"
-            if path.is_file():
-                identity = json.loads(path.read_text())
-                out[str(path.parent.parent.relative_to(REPO))] = {
-                    "git_sha": identity["git_provenance"]["git_sha"],
-                    "git_dirty": identity["git_provenance"]["git_dirty"],
-                    "campaign_config_sha256": identity["campaign_config_sha256"]}
+    for seed in SEEDS:
+        path = CAMPAIGN / f"seed{seed}/source_snapshot/source_identity.json"
+        if path.is_file():
+            identity = json.loads(path.read_text())
+            out[str(path.parent.parent.relative_to(REPO))] = {
+                "git_sha": identity["git_provenance"]["git_sha"],
+                "git_dirty": identity["git_provenance"]["git_dirty"],
+                "campaign_config_sha256": identity["campaign_config_sha256"]}
     return out
 
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
-    region = DriveableRegion.for_world()
     task_names = tasks()
-    rows, scores = [], {}
+    selected = []
     for seed in SEEDS:
-        ledger = {}
-        # The task C rerun (METHOD amendment 2026-09-25) has its own log root, because a
-        # resumed root must share one commit; its entries replace any older task C entries.
-        # The B/C swap rerun likewise replaces every task B and C entry.
-        for root in LOG_ROOTS:
-            path = root / f"seed{seed}/campaign_log.json"
-            ledger.update(json.loads(path.read_text()) if path.is_file() else {})
+        path = CAMPAIGN / f"seed{seed}/campaign_log.json"
+        if not path.is_file():
+            raise FileNotFoundError(f"missing final campaign ledger: {path}")
+        ledger = json.loads(path.read_text())
         for task in task_names:
             for model in MODELS:
                 for state in STATES:
                     condition = f"{model}_{state}"
-                    row, score = run_row(task, condition, seed,
-                                         ledger.get(f"{task}__{condition}__seed{seed}"), region)
-                    rows.append(row)
-                    if score:
-                        scores[row["run_dir"]] = score
+                    entry = ledger.get(f"{task}__{condition}__seed{seed}")
+                    selected.append((task, condition, seed, entry))
+
+    run_dirs = [str(Path(entry["run_dir"])) for _, _, _, entry in selected
+                if entry is not None and entry.get("outcome") not in (None, "infra_invalid")]
+    workers = min(8, os.cpu_count() or 1, len(run_dirs))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+        scored = dict(executor.map(score_run, run_dirs))
+
+    rows, scores = [], {}
+    for task, condition, seed, entry in selected:
+        score = scored.get(str(Path(entry["run_dir"]))) if entry else None
+        row, score = run_row(task, condition, seed, entry, score)
+        rows.append(row)
+        if score:
+            scores[row["run_dir"]] = score
     fields = ["task", "condition", "model", "state", "seed", "outcome", "completion_reason", "route",
               "success", "failure", "collision", "collision_stamp_s", "collision_x", "collision_y",
               *METRICS[1:], "run_dir"]
@@ -267,6 +292,10 @@ def main() -> int:
             m: matched_differences(rows, "spatial_removal", f"{m}_removal") for m in ("global", "per_camera")},
         "bootstrap": {"resamples": BOOTSTRAP_RESAMPLES, "seed": BOOTSTRAP_SEED, "unit": "(task, seed) pair"},
     }
+    if summary["cells"] != 90 or summary["valid"] != 90:
+        raise RuntimeError(
+            f"final campaign is incomplete: cells={summary['cells']}, valid={summary['valid']}"
+        )
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     plot_trajectories(rows, task_names)
     print(json.dumps({"out": str(OUT), "cells": summary["cells"], "valid": summary["valid"]}))
