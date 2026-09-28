@@ -185,13 +185,13 @@ def main():
 % Fusion: spatial RMSE {100 * fm['spatial']['rmse_m']:.2f} cm, {100 * fm['spatial']['rmse_reduction_vs_equal']:.1f}% below equal weights and
 %   {100 * fm['spatial']['rmse_reduction_vs_best_spatial_single']:.1f}% below the R2-selected single camera; by camera count 2/3/4:
 %   {by_count['2']:.2f} / {by_count['3']:.2f} / {by_count['4']:.2f} cm
-% Navigation, route changes under removal (task-seed pairs): global {changes['global'][0]}/{changes['global'][1]},
+% Navigation, route changes under dropout (task-seed pairs): global {changes['global'][0]}/{changes['global'][1]},
 %   per-camera {changes['per_camera'][0]}/{changes['per_camera'][1]}, spatial {changes['spatial'][0]}/{changes['spatial'][1]} (tasks: {', '.join(P.TASK_LABEL[t] for t in changes['spatial'][2])})
-% Removal minus intact, matched on (task, seed), mean [95% bootstrap CI]:
+% Dropout minus intact, matched on (task, seed), mean [95% bootstrap CI]:
 %   success (pp):        global {ci(diff['global']['success'])}, per-camera {ci(diff['per_camera']['success'])}, spatial {ci(diff['spatial']['success'])}
 %   belief error (cm):   global {ci(diff['global']['belief_error_m'])}, per-camera {ci(diff['per_camera']['belief_error_m'])}, spatial {ci(diff['spatial']['belief_error_m'])}
 %   belief sigma (cm):   global {ci(diff['global']['belief_sigma_major_m'])}, per-camera {ci(diff['per_camera']['belief_sigma_major_m'])}, spatial {ci(diff['spatial']['belief_sigma_major_m'])}
-% Spatial minus other model, both with the camera removed:
+% Spatial minus other model, both with one camera dropped:
 %   success (pp):        vs global {ci(vs['global']['success'])}, vs per-camera {ci(vs['per_camera']['success'])}
 %   belief error (cm):   vs global {ci(vs['global']['belief_error_m'])}, vs per-camera {ci(vs['per_camera']['belief_error_m'])}
 """

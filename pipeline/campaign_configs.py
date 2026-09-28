@@ -68,7 +68,7 @@ def main() -> int:
     if args.only_task:
         execution["tasks"] = {name: cfg for name, cfg in execution["tasks"].items()
                               if name in requested}
-    # Task-visibility rule: every start and goal must stay seen with the task's camera removed.
+    # Task-visibility rule: every start and goal must stay seen with the task's camera dropped.
     import sys
     sys.path.insert(0, str(REPO))
     from pipeline.check_task_visibility import failures

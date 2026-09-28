@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task-visibility rule (METHOD amendment 2026-09-25): in the removal condition, the task's start
+"""Task-visibility rule (METHOD amendment 2026-09-25): in the dropout condition, the task's start
 and goal must each be seen by at least one active camera in at least 90 % of the captured static
 views within 0.75 m. A view counts as seen when the robot has semantic pixels in it.
 

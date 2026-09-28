@@ -1,8 +1,7 @@
-# Final thesis method
+# Method
 
-This document defines the scientific method implemented by this repository.
-Historical alternatives are available through Git history and are not part of
-the active submission.
+This document describes the method implemented in this repository and used for
+the thesis experiments.
 
 ## 1. Scope
 
@@ -10,7 +9,7 @@ A mobile robot navigates a known simulated warehouse using wheel odometry and
 position measurements from five fixed external cameras. The thesis tests
 whether a camera- and position-dependent measurement covariance improves
 multi-camera fusion and belief-space route planning, especially when one camera
-is removed.
+is dropped.
 
 The compared measurement models are:
 
@@ -23,7 +22,7 @@ fusion rule, EKF, planner, route initializations, controller, tasks and seeds.
 
 ## 2. Data and partitions
 
-Camera observations are paired with recorded reference poses in the canonical
+Camera observations are paired with recorded reference poses in the simulated
 warehouse. A complete physical position is the independent partition unit: all
 headings, repetitions and cameras at that position stay in one role.
 
@@ -33,7 +32,7 @@ The final split contains:
 | --- | --- | ---: |
 | D_mu | fit the systematic-displacement correction | 1,326 |
 | D_R | fit R0, R1 and R2 | 1,333 |
-| D_dev | fixed development checks | 335 |
+| D_val (`D_dev` in the code) | sensitivity checks of the fixed R2 constants | 335 |
 | D_test | one held-out evaluation | 168 |
 
 Exact source paths, hashes, exclusions and opportunity counts are frozen in
@@ -123,7 +122,7 @@ cross-covariance.
 The planner predicts belief mean and covariance for every candidate control
 sequence. Expected camera information is evaluated at five planar sigma points
 of the predicted position belief. Active-camera information matrices are added,
-and camera removal deletes the affected camera from this sum.
+and camera dropout excludes the affected camera from this sum.
 
 The route objective is the arrival-gated, discounted mean of:
 
@@ -154,12 +153,12 @@ Ground truth does not stop the robot.
 The experiment crosses:
 
 - three covariance models: R0, R1 and R2;
-- two network states: intact and one task-specific camera removed;
+- two network states: intact and one task-specific camera dropped;
 - five predeclared tasks; and
 - three matched noise seeds.
 
 This gives 90 runs. The active tasks and route initializations are defined in
-`pipeline/tasks.yaml`. Each removal applies to both route planning and runtime
+`pipeline/tasks.yaml`. Each dropout applies to both route planning and runtime
 fusion for the complete run.
 
 ## 11. Outcome and evidence rules
@@ -174,28 +173,28 @@ A run is successful only when:
 Collision scoring uses ground-truth poses only after execution. The simulator
 does not provide a collision signal to the controller.
 
-Report:
+The reported navigation metrics are:
 
 - success by matched task and seed;
 - fused camera error at fusion timestamps;
 - belief error at belief timestamps;
 - planar belief major-axis sigma;
 - missed accepted-update fraction;
-- route changes between matched intact and removal conditions; and
+- route changes between matched intact and dropout conditions; and
 - fused and belief NIS/containment.
 
-The final analysis reads only the canonical campaign root and refuses incomplete
-or inconsistent evidence.
+The analysis reads only the final campaign folder and stops on incomplete or
+inconsistent run evidence.
 
-## 12. Ground-truth firewall
+## 12. Use of ground truth
 
-Ground truth may:
+Ground truth is used to:
 
 - provide offline correction targets;
 - score localization and navigation after execution; and
 - support offline collision auditing.
 
-Ground truth may not enter:
+Ground truth is not used in:
 
 - detector admission;
 - runtime correction or covariance query;
@@ -214,15 +213,3 @@ Ground truth may not enter:
   position-heading cross-covariance. Near image, visibility or map edges, a
   biased anisotropic position update may therefore affect tracking.
 - Routes are selected from finite initializations and are not replanned online.
-
-## 14. Authority
-
-For a reproduced result, authority is:
-
-1. `pipeline/dataset_lock.json`;
-2. the final campaign manifest;
-3. the committed implementation named by the manifest;
-4. this method document; and
-5. the thesis manuscript.
-
-Development reports, old run folders and Git history are context only.
