@@ -28,7 +28,8 @@ sys.path.insert(0, str(ROOT / "figures"))
 from style import CAM_COLOUR, draw_warehouse, layout  # noqa: E402
 
 PAPER_FIGURES = ROOT.parent / "papers" / "Thesis" / "figures"
-CAMPAIGN = Path(__import__("os").environ.get("THESIS_CAMPAIGN_ROOT", ROOT / "logs/thesis/campaign"))
+CAMPAIGN = Path(__import__("os").environ.get(
+    "THESIS_CAMPAIGN_ROOT", ROOT / "logs/thesis/final_campaign/campaign"))
 INK = "#222831"
 BELIEF = "#2a78d6"
 GAP = 0.5  # s; a longer pause in one camera's stream breaks its band

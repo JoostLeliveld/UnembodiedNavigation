@@ -187,7 +187,7 @@ quadratic, so it is continuous and C1 at contact.
 | `nogo_safe_distance` | 0.55-0.585 | **0.0 for the thesis pipeline** | Shape-aware paths use the oriented 0.80 x 0.55 m body and the map's explicit 0.10 m geometric inset. Adding a centre-distance radius would count clearance twice. |
 | `nogo_warning_band` | 0.05 | **0.05 m from the body** | zero at >=5 cm body clearance; rises only inside the band. |
 | `nogo_logbarrier_eps` | 1e-3 | **0.05** | = `warning_band`. At 1e-3 a 1 mm violation cost 2,036, more than the entire risk term. |
-| `use_belief_nogo_cost` | false | **true** | the covariance -> clearance channel. |
+| `use_belief_nogo_cost` | false | **true** | evaluate the obstacle penalty at planar belief sigma points. |
 | `network_goal_std_m` | 0.35 | **0.10** | preferred position standard deviation used by EFE risk. This is deliberately separate from the 0.35 m terminal arrival tolerance. |
 | `network_goal_std_start_m` | none | **5.0** | anneal start; see above. |
 | `kouw_et1_ambiguity` | false | **true** | the thesis method. |

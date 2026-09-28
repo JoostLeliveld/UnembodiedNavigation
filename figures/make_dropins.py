@@ -135,8 +135,8 @@ def main():
     report = json.loads((T / "final_audit/report.json").read_text())
     fusion = json.loads((T / "final_audit_fusion/report.json").read_text())
     ddev = json.loads((T / "fits/ddev_evaluation/manifest.json").read_text())["D_dev_correction_metrics"]
-    summary = json.loads((T / "analysis/summary.json").read_text())
-    with (T / "analysis/runs.csv").open(newline="") as handle:
+    summary = json.loads((P.ANALYSIS / "summary.json").read_text())
+    with (P.ANALYSIS / "runs.csv").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     n_obs, n_pos, cov_rows = covariance_table(report)
     n_batches, fus_rows = fusion_table(fusion)

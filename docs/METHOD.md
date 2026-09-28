@@ -251,8 +251,8 @@ comparison.
 - The robot is an oriented rectangle of 0.80 by 0.55 metres.
 - A hard swept-footprint check rejects geometrically invalid route segments and unsafe
   commands.
-- A separate soft, uncertainty-aware no-go cost discourages routes whose predicted belief
-  places the robot footprint near non-traversable space.
+- A separate soft, uncertainty-aware no-go cost evaluates the oriented-footprint obstacle
+  penalty at planar belief sigma points.
 - Hard geometric rejection and the soft belief-dependent planning cost must be implemented,
   reported, and tested separately.
 

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
-ANALYSIS = REPO / "logs/thesis/analysis"
+ANALYSIS = REPO / "logs/thesis/final_campaign/analysis"
 BINS_S = (0.1, 0.3, 0.5, 0.7, 0.9, 1.25, 1.75, 2.5, 3.5, 5.0, 8.0)
 STATIONARY_M = 0.05
 

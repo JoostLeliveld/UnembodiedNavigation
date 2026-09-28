@@ -45,10 +45,7 @@ class NogoCostConfig:
     contact_gain: float = 100.0
     geometry_json: str = ''
     # 'keep_out': penalise being inside/near the prisms (obstacle footprints).
-    # 'keep_in':  penalise leaving the prism union (driveable region);
-    #             safe_distance is the required mean clearance from the
-    #             driveable-region boundary. When belief no-go is enabled,
-    #             kappa additionally expands this by kappa * sigma_max.
+    # 'keep_in':  penalise leaving the prism union (driveable region).
     mode: str = 'keep_out'
 
 
@@ -199,29 +196,6 @@ class NogoZoneCostModel:
         yaw = float(m[2]) if len(m) > 2 else None
         return float(self._clearance_np(xy, yaw))
 
-    @staticmethod
-    def _sigma_max_xy_np(S) -> float:
-        cov_xy = np.asarray(S, dtype=float)[:2, :2]
-        cov_xy = 0.5 * (cov_xy + cov_xy.T)
-        try:
-            eigvals = np.linalg.eigvalsh(cov_xy)
-        except np.linalg.LinAlgError:
-            return 0.0
-        return float(math.sqrt(max(float(np.max(eigvals)), 0.0)))
-
-    def clearance_belief_tube_np(self, m, S, *, kappa: float = 2.0) -> float:
-        """Clearance of the mean plus a kappa-sigma xy belief tube.
-
-        For keep_in, positive means the predicted belief tube remains inside
-        the known driveable region after the configured mean clearance margin.
-        For keep_out, this conservatively shrinks the obstacle clearance by the
-        same covariance margin.
-        """
-        if not self.enabled:
-            return float('inf')
-        margin = max(float(kappa), 0.0) * self._sigma_max_xy_np(S)
-        return float(self.clearance_state_np(m) - margin)
-
     def inside_state_np(self, m) -> bool:
         return bool(self.penetration_depth_state_np(m) > 0.0)
 
@@ -266,10 +240,6 @@ class NogoZoneCostModel:
         """Expected no-go penalty under the current xy belief covariance."""
         if not self.enabled:
             return 0.0
-        if self.mode == 'keep_in':
-            clearance = self.clearance_belief_tube_np(m, S, kappa=kappa)
-            return self._penalty_from_clearance_np(clearance)
-
         mean_xy = np.asarray([float(m[0]), float(m[1])], dtype=float)
         cov_xy = np.asarray(S, dtype=float)[:2, :2]
         cov_xy = 0.5 * (cov_xy + cov_xy.T)
@@ -294,7 +264,11 @@ class NogoZoneCostModel:
             1.0 / (2.0 * (2.0 + kappa)),
             1.0 / (2.0 * (2.0 + kappa)),
         )
-        return float(sum(w * self.penalty_state_np([p[0], p[1], 0.0]) for p, w in zip(sigma_points, weights)))
+        yaw = float(m[2]) if len(m) > 2 else 0.0
+        return float(sum(
+            w * self.penalty_state_np([p[0], p[1], yaw])
+            for p, w in zip(sigma_points, weights)
+        ))
 
     def make_penalty_state_casadi(self):
         try:
@@ -363,14 +337,9 @@ class NogoZoneCostModel:
                 return 0.0
             return zero_penalty
 
-        # Build the same shape-aware state penalty as the free-solve path. For
-        # keep-out geometry evaluate it at sigma points; for the rectangular
-        # site boundary conservatively subtract the largest belief-axis sigma
-        # from the exact oriented-body clearance.
+        # Evaluate the same shape-aware obstacle penalty at five planar sigma
+        # points, retaining the predicted mean heading at every point.
         state_penalty = self.make_penalty_state_casadi()
-        warning_band = float(self.warning_band)
-        near_weight = float(self.near_weight)
-        contact_gain = float(self.contact_gain)
         kappa = max(float(kappa), 1e-6)
 
         def chol_2x2(M, eps=1e-9):
@@ -386,25 +355,6 @@ class NogoZoneCostModel:
             )
 
         def penalty_belief_casadi(m, S):
-            if self.mode == 'keep_in' and self.robot_half_length is not None:
-                p = self.prisms[0]
-                c, s = ca.fabs(ca.cos(m[2])), ca.fabs(ca.sin(m[2]))
-                sx = self.robot_half_length * c + self.robot_half_width * s
-                sy = self.robot_half_length * s + self.robot_half_width * c
-                clearance = ca.mmin(ca.vertcat(
-                    m[0] - p.xmin - sx, p.xmax - m[0] - sx,
-                    m[1] - p.ymin - sy, p.ymax - m[1] - sy,
-                )) - self.body_margin
-                cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
-                trace = cov_xy[0, 0] + cov_xy[1, 1]
-                det = cov_xy[0, 0] * cov_xy[1, 1] - cov_xy[0, 1] * cov_xy[1, 0]
-                disc = ca.sqrt(ca.fmax(ca.power(trace, 2) - 4.0 * det, 0.0))
-                lambda_max = ca.fmax(0.5 * (trace + disc), 0.0)
-                sigma_margin = kappa * ca.sqrt(lambda_max + 1e-9)
-                deficit = ca.fmax(warning_band - (clearance - sigma_margin), 0.0) / warning_band
-                overlap = ca.fmax(deficit - 1.0, 0.0)
-                return near_weight * (deficit**2 + contact_gain * overlap**2)
-
             mean_xy = ca.reshape(m[:2], 2, 1)
             cov_xy = 0.5 * (S[:2, :2] + S[:2, :2].T)
             spread = math.sqrt(2.0 + kappa) * chol_2x2(cov_xy + 1e-9 * ca.DM.eye(2))

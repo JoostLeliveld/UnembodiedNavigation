@@ -24,7 +24,7 @@ STATE_LABEL = {"intact": "intact", "removal": "dropout"}
 
 
 def main():
-    with (P.THESIS / "analysis/runs.csv").open(newline="") as handle:
+    with (P.ANALYSIS / "runs.csv").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     route = {(r["task"], r["model"], r["state"], r["seed"]): r["route"] for r in rows}
     tasks = [t["name"] for t in P.tasks()]

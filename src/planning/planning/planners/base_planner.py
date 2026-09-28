@@ -977,21 +977,7 @@ class UnicyclePlannerBase:
                     self.collision_clearance_state_np(m_seg),
                 )
                 if self.nogo_cost_model is not None and self.nogo_cost_model.enabled:
-                    if self.use_belief_nogo_cost:
-                        _mu_y, Sigma_y, Gamma = self.approx_observation(
-                            m_seg,
-                            S,
-                            method=self.approx_method,
-                            R_override=vis_diag['R_plan'],
-                        )
-                        S_nogo = self._expected_state_posterior_covariance(S, Sigma_y, Gamma)
-                        nogo_clearance = self.nogo_cost_model.clearance_belief_tube_np(
-                            m_seg,
-                            S_nogo,
-                            kappa=self.nogo_belief_kappa,
-                        )
-                    else:
-                        nogo_clearance = self.nogo_cost_model.clearance_state_np(m_seg)
+                    nogo_clearance = self.nogo_cost_model.clearance_state_np(m_seg)
                     min_nogo_clearance = min(min_nogo_clearance, float(nogo_clearance))
                     if self.nogo_mode == 'keep_in':
                         min_nogo_mean_inside = min(

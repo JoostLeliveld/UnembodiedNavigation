@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
-ANALYSIS = REPO / "logs/thesis/analysis"
+ANALYSIS = REPO / "logs/thesis/final_campaign/analysis"
 CHI2_95 = -2.0 * math.log(0.05)  # 2-D chi-square 95 % quantile, 5.991
 
 

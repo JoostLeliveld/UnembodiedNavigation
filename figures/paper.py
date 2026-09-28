@@ -31,6 +31,9 @@ from matplotlib.patches import Rectangle  # noqa: E402
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "src/unav_common"), str(REPO / "world")]
 THESIS = REPO / "logs/thesis"
+FINAL = THESIS / "final_campaign"
+ANALYSIS = FINAL / "analysis"
+ROUTES = FINAL / "routes"
 OUT = THESIS / "figures"
 WORLD = REPO / "src/sim/gazebo_worlds/worlds/warehouse_v2.world.sdf"
 
@@ -160,9 +163,7 @@ BC_SWAP = THESIS / "revisions/bc_dropout_swap"
 
 
 def tasks():
-    cfg = yaml.safe_load((THESIS / "campaign_configs/campaign_seed91500.yaml").read_text())
-    swap = yaml.safe_load((BC_SWAP / "campaign_configs/campaign_seed91500.yaml").read_text())
-    cfg["tasks"].update(swap["tasks"])
+    cfg = yaml.safe_load((FINAL / "campaign_configs/campaign_seed91500.yaml").read_text())
     spec = {t["name"]: t for t in yaml.safe_load((REPO / "pipeline/tasks.yaml").read_text())["tasks"][WORLD.name]}
     out = []
     for name, t in cfg["tasks"].items():
@@ -181,7 +182,7 @@ TASK_LABEL = {
 
 
 def planned_route(task: str, condition: str) -> np.ndarray:
-    root = BC_SWAP / "routes" if (BC_SWAP / "routes" / task).is_dir() else THESIS / "routes"
+    root = ROUTES
     result = json.loads((root / f"{task}/manifest.json").read_text())["results"][condition]
     return np.asarray(json.loads((root / f"{task}/{result['preselected_route']['path']}").read_text()))
 

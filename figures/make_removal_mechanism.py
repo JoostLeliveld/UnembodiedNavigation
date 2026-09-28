@@ -25,7 +25,7 @@ TASK = sys.argv[1] if len(sys.argv) > 1 else "thesis10_camera_c_inner_warehouse_
 
 
 def runs():
-    with (P.THESIS / "analysis/runs.csv").open(newline="") as handle:
+    with (P.ANALYSIS / "runs.csv").open(newline="") as handle:
         return [r for r in csv.DictReader(handle) if r["task"] == TASK]
 
 

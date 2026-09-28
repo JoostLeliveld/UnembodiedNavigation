@@ -33,7 +33,7 @@ def peak(run_dir, column, first, stop):
 
 
 def main():
-    with (P.THESIS / "analysis/runs.csv").open(newline="") as handle:
+    with (P.ANALYSIS / "runs.csv").open(newline="") as handle:
         runs = list(csv.DictReader(handle))
     for r in runs:
         s = json.loads((P.REPO / r["run_dir"] / "run_summary.json").read_text())

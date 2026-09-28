@@ -23,7 +23,7 @@ from pipeline.score_collisions import read_poses
 
 
 def main():
-    with (P.THESIS / "analysis/runs.csv").open(newline="") as handle:
+    with (P.ANALYSIS / "runs.csv").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     norm = LogNorm(*P.SIGMA_RANGE_CM)
     fig, axes = P.plt.subplots(2, 3, figsize=(P.TEXT, 3.75), gridspec_kw=dict(wspace=0.04, hspace=0.2))
