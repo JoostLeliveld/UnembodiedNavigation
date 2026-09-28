@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The reference-position dataset (v11 = the v10 captures, re-split as one dataset): one loader for every stage.
+"""Load the frozen reference-position dataset used by the final thesis pipeline.
 
 v9 is an INDEX over the capture passes, not a copy. Its rows are
 
@@ -26,21 +26,14 @@ supplement pose overlaps an object.
 * the fresh, spatially balanced final audit of v9 (keys `Vnnnn`, planned by
   `capture/plan_rebalance.py`).
 
-* the v10 lane-grid capture (keys `Lnnnn`, planned by `capture/plan_hard_views.py`), with
-  roles from `capture/partition_v10.py` inside the v9 strata.
+* the lane-grid capture (keys `Lnnnn`, planned by `capture/plan_hard_views.py`);
+* the final fill capture (keys `Fnnnn`, planned by `capture/plan_fill_v11.py`).
 
-Roles (v11). `captures/v11/partition_v11.csv`, written by `capture/partition_v11.py`, re-splits
+Roles. `captures/v11/partition_v11.csv`, written by `capture/partition_v11.py`, re-splits
 every captured position as one dataset: inside each v9 2 x 2 m stratum all positions are
 ordered by sha256(seed, key) regardless of capture, and take the final audit, D_dev and D_R
-quotas (area-proportional, the v10 totals), the rest D_mu. The v10 roles below are superseded.
-
-Roles (v10, superseded). `captures/v10/partition_v10.csv` is `captures/v9/partition_v9.csv` unchanged plus
-the lane positions. Every v9 position's role comes from `captures/v9/partition_v9.csv`, written by
-`capture/plan_rebalance.py`: D_dev and D_R are spread over 2 x 2 m strata in proportion to
-the area the robot can occupy, the rest of the captured positions are D_mu, and the final
-audit is the fresh v9 capture. The role a position had in v8 is kept as `v8_role`
-(v5 plan role, or the nearest v5 role for an added v8 position). Added positions sit after
-the v5 plan in `plan_pose_index`.
+quotas, with the remaining positions assigned to D_mu. Versioned directory names below are
+immutable capture provenance, not competing dataset definitions.
 
 Presence check: a pose where at least two cameras should see the robot but none does is
 legitimate at one position (racks can hide all its headings), but such a run spanning three

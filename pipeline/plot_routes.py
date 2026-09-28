@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect the 30 solved v8 offline routes before the campaign.
+"""Inspect the 30 solved offline routes used by the final campaign.
 
 One row per task, one column per covariance model. Each panel shows the intact route
 (solid) and the dropout route (dashed) over the network information of that model with
@@ -97,7 +97,7 @@ def main() -> int:
                          f"({lengths['intact'][1]:.1f} m / {lengths['removal'][1]:.1f} m)", fontsize=10)
             if t == 0 and m == 0:
                 ax.legend(loc="lower right", fontsize=8)
-    fig.suptitle("v8 offline routes: intact (solid) vs camera dropout (dashed), over the dropout-network "
+    fig.suptitle("Final offline routes: intact (solid) vs camera removal (dashed), over the camera-network "
                  "information of each model", fontsize=13)
     out = ROUTES / "routes_overview.png"
     fig.savefig(out, dpi=110)

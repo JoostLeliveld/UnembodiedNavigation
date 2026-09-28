@@ -1,36 +1,18 @@
-# `sim`
+# Simulator
 
-This package provides the plant and simulator plumbing for the thesis experiments.
-
-It is the physical stage for the demo: Gazebo warehouse, external camera,
-TurtleBot3 Burger description, startup gates, and optional command/encoder
+This ROS 2 package supplies the physical plant and sensing environment used by the thesis:
+the Gazebo warehouse, wall cameras, AMR description, startup gates, and command/encoder
 noise.
-
-## Central Files
 
 | File | Role |
 | --- | --- |
-| [`launch/bringup_sim.launch.py`](launch/bringup_sim.launch.py) | simulator bringup used by `experiments` |
-| [`gazebo_worlds/worlds/warehouse_aws.world.sdf`](gazebo_worlds/worlds/warehouse_aws.world.sdf) | locked paper-facing AWS-style warehouse visibility benchmark |
-| [`models/external_camera/model.sdf`](models/external_camera/model.sdf) | external camera model |
-| [`robot_description/urdf/turtlebot3_burger.urdf.xacro`](robot_description/urdf/turtlebot3_burger.urdf.xacro) | TurtleBot3 Burger robot description |
-| [`sim/actuation_noise_node.py`](sim/actuation_noise_node.py) | optional executed-command perturbation |
-| [`sim/encoder_noise_node.py`](sim/encoder_noise_node.py) | optional noisy odometry stream |
-| [`sim/wait_for_odom.py`](sim/wait_for_odom.py) | startup gate used in launches |
+| `launch/bringup_sim.launch.py` | simulator bringup used by the experiment package |
+| `gazebo_worlds/worlds/warehouse_v2.world.sdf` | final warehouse, camera network, and collision geometry |
+| `models/external_camera/model.sdf` | external camera model |
+| `robot_description/urdf/warehouse_amr.urdf.xacro` | AMR description |
+| `sim/actuation_noise_node.py` | optional executed-command perturbation |
+| `sim/encoder_noise_node.py` | noisy odometry stream used by the final campaign |
+| `sim/wait_for_odom.py` | launch startup gate |
 
-## Outputs
-
-- Gazebo world
-- `/odom`
-- `/external_camera/image_raw`
-- robot spawn and startup readiness
-
-## Demo Focus
-
-The current public storyline should use `warehouse_aws.world.sdf`. Older compact
-worlds and route probes are historical material unless a current registry entry
-names them as evidence.
-
-## Caveat
-
-This package is infrastructure. It should appear in the paper as the plant and sensing environment, not as the thesis contribution.
+The submitted campaign uses `warehouse_v2.world.sdf`. Other worlds are retained only where
+package-level simulator tests require them; they are not alternative thesis results.

@@ -2449,8 +2449,6 @@ def main() -> int:
         pgid = None
         process_returncode = None
 
-        # Optional: stream-record the external camera for this run (opt-in).
-        recorder_pgid = None
         timed_out = False
         no_first_cmd_timeout = False
         spawn_error = ''
@@ -2460,14 +2458,6 @@ def main() -> int:
         try:
             process = subprocess.Popen(cmd, start_new_session=True, env=run_env)
             pgid = os.getpgid(process.pid)
-            if os.environ.get('CAMPAIGN_RECORD_CAMERA'):
-                cam_out = run_log_dir / 'camera_frames'
-                cam_out.mkdir(parents=True, exist_ok=True)
-                rec_proc = subprocess.Popen(
-                    ['python3', str(REPO_ROOT / 'pipeline/record_camera_stream.py'),
-                     '--out-dir', str(cam_out)],
-                    start_new_session=True, env=run_env)
-                recorder_pgid = os.getpgid(rec_proc.pid)
             while True:
                 if process.poll() is not None:
                     process_returncode = process.returncode
@@ -2496,8 +2486,6 @@ def main() -> int:
         except OSError as exc:
             spawn_error = f'{type(exc).__name__}: {exc}'
         finally:
-            if recorder_pgid is not None:
-                _terminate_process_group(recorder_pgid)
             if pgid is not None:
                 _terminate_process_group(pgid)
             _cleanup_owned_run(run_token)

@@ -13,7 +13,7 @@ GP artifact paths.
 | [`launch/warehouse_primary_comparison.launch.py`](launch/warehouse_primary_comparison.launch.py) | active launch for `constant_R_efe` and `visibility_aware_efe` |
 | [`launch/warehouse_visibility_capture.launch.py`](launch/warehouse_visibility_capture.launch.py) | offline capture launch for GP fitting |
 | [`config/world_profiles.yaml`](config/world_profiles.yaml) | world registry and camera/profile metadata |
-| [`config/tasks.yaml`](config/tasks.yaml) | benchmark, support, exploratory, and legacy task definitions |
+| [`config/tasks.yaml`](config/tasks.yaml) | reusable simulator task fixtures; final campaign tasks live in `pipeline/tasks.yaml` |
 | [`experiments/core/visibility_launch_common.py`](experiments/core/visibility_launch_common.py) | shared runtime assembly |
 | [`experiments/nodes/experiment_logger.py`](experiments/nodes/experiment_logger.py) | run manifest, CSV logging, and summary writing |
 

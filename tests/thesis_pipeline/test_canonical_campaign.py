@@ -23,16 +23,16 @@ CONDITIONS = ["global_intact", "global_removal", "per_camera_intact", "per_camer
               "spatial_intact", "spatial_removal"]
 DROPPED = {
     "thesis10_camera_a_western_dock_detour": "camera_A",
-    "thesis10_camera_b_cross_warehouse_detour": "camera_B",
-    "thesis10_camera_c_inner_warehouse_detour": "camera_C",
-    "thesis10_camera_e_eastern_detour": "camera_E",
+    "thesis10_camera_b_cross_warehouse_detour": "camera_C",
+    "thesis10_camera_c_inner_warehouse_detour": "camera_B",
+    "thesis10_camera_e_eastern_detour": "camera_D",
     "thesis10_camera_e_long_cross_warehouse_detour": "camera_E",
 }
 ALL_CAMERAS = ["camera_A", "camera_B", "camera_C", "camera_D", "camera_E"]
 
 
 def test_campaign_is_five_tasks_by_six_conditions_by_three_seeds():
-    """The amended campaign: 90 runs, one declared dropped camera per task."""
+    """The final campaign has 90 runs and one declared removed camera per task."""
     for template in ("route_planning_template.yaml", "execution_template.yaml"):
         campaign = yaml.safe_load((REPO / "pipeline" / template).read_text())
         assert campaign["world"] == "warehouse_v2.world.sdf"

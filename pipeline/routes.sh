@@ -1,6 +1,6 @@
 #!/bin/bash
-# Solve the 30 v8 offline routes (5 tasks x 6 conditions) and bind them into one execution
-# config per seed (amendment 2026-09-23). Skips any task whose routes already exist.
+# Solve the 30 final offline routes (5 tasks x 6 conditions) and bind them into one
+# execution config per seed. Skips any task whose routes already exist.
 #
 #   bash pipeline/routes.sh
 cd "$(dirname "$0")/.."

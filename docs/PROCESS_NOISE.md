@@ -1,9 +1,6 @@
-# Process noise Q — SET from the simulated encoder (2026-09-27)
+# Encoder-derived process noise
 
-See docs/ODOMETRY_NOISE_LOCK.md for the locked odometry, noise, Q and update setup.
-
-    process_noise_model = encoder   (default; planning.core.encoder_noise_model)
-    process_noise_xy / _theta = 0.02 / 0.08   (legacy 'constant_psd' model only)
+The thesis uses the encoder model in `planning.core.encoder_noise_model`.
 
 Q is not fitted and not tuned. It is the white-noise equivalent of the noise the
 simulator injects into the encoder, placed in the continuous-time unicycle
@@ -70,15 +67,10 @@ contains the odometry error in 0.965-0.995 of cases at 1, 3 and 10 s (position a
 heading). NumPy and CasADi Q agree to machine precision; the model constants are
 tested against the simulator's.
 
-History: 0.02 / 0.08 constant PSDs (locked 2026-09-14) grew heading variance with
-time and were about ten times the realised heading error; see METHOD.md,
-amendment 2026-09-27.
-
 ## The lock
 
 - Defaults set in `src/experiments/experiments/core/visibility_launch_common.py`
   and `src/planning/planning/nodes/unicycle_planner_node.py`.
-- `UnicyclePlannerBase.__init__` raises a `RuntimeWarning` if either constant is
-  overridden while the legacy `constant_psd` model is selected.
 
-Changing either number is a method change. Record the reason here first.
+Changing the encoder constants or the 12 s bias horizon is a method change and
+requires a new campaign.
