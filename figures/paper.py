@@ -176,8 +176,8 @@ TASK_LABEL = {
     "thesis10_camera_a_western_dock_detour": "A: western dock",
     "thesis10_camera_b_cross_warehouse_detour": "B: cross-warehouse",
     "thesis10_camera_c_inner_warehouse_detour": "C: inner warehouse",
-    "thesis10_camera_e_eastern_detour": "E: eastern",
-    "thesis10_camera_e_long_cross_warehouse_detour": "E: long cross-warehouse",
+    "thesis10_camera_e_eastern_detour": "E-east",
+    "thesis10_camera_e_long_cross_warehouse_detour": "E-long",
 }
 
 
