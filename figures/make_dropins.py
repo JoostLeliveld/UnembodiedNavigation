@@ -96,9 +96,10 @@ def missed_updates(run, period_s=0.2):
     return sum(max(x - 1, 0) for x in k) / sum(k) if sum(k) else math.nan
 
 
-def navigation_table(rows, summary):
+def navigation_table(rows, summary, coverage):
     """Rows of tab:navigation-final: success, fused RMSE pooled over the condition, belief error
-    and belief sigma (means over runs), missed updates (mean over runs)."""
+    and belief sigma (means over runs), missed updates (mean over runs), and the pooled 95%
+    ellipse coverage of the fused measurement and of the belief (runtime_coverage.json)."""
     lines = []
     for model in P.MODELS:
         for state in ("intact", "removal"):
@@ -107,10 +108,12 @@ def navigation_table(rows, summary):
             succ = f"{a['successes']}/{a['cells']}"
             fused = [e for r in arm for e in fused_sq_errors(r["run_dir"])]
             missed = [missed_updates(r["run_dir"]) for r in arm]
+            cov = coverage["groups"][f"{model}_{state}"]
             lines.append(
                 f"        {P.MODEL_LABEL[model]}, {'intact' if state == 'intact' else 'dropout':<7} & {succ}"
                 f" & {100 * math.sqrt(sum(fused) / len(fused)):.2f} & {100 * a['belief_error_m']['mean']:.2f}"
-                f" & {100 * a['belief_sigma_major_m']['mean']:.2f} & {100 * np_nanmean(missed):.1f} \\\\")
+                f" & {100 * a['belief_sigma_major_m']['mean']:.2f} & {100 * np_nanmean(missed):.1f}"
+                f" & {100 * cov['fused']['pooled_coverage_95']:.1f} & {100 * cov['belief']['pooled_coverage_95']:.1f} \\\\")
     return "\n".join(lines)
 
 
@@ -140,7 +143,8 @@ def main():
         rows = list(csv.DictReader(handle))
     n_obs, n_pos, cov_rows = covariance_table(report)
     n_batches, fus_rows = fusion_table(fusion)
-    nav_rows = navigation_table(rows, summary)
+    coverage = json.loads((P.ANALYSIS / "runtime_coverage.json").read_text())
+    nav_rows = navigation_table(rows, summary, coverage)
     changes = route_changes(rows)
     raw, struct, full = ddev["raw"], ddev["structured_only"], ddev["structured_plus_visibility"]
     fm = fusion["metrics"]
@@ -170,6 +174,7 @@ def main():
 % goal on the belief, true final distance < 0.30 m, never left the driveable region.
 % Fused error: RMSE over fusion decisions, pooled over the condition. Belief error and sigma:
 % means over runs. Missed updates: share of 0.2 s camera periods without an accepted update.
+% Last two columns: pooled share of errors inside the fused and the belief 95% ellipse.
 {nav_rows}
 
 % === In-text numbers =============================================================
