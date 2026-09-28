@@ -163,7 +163,7 @@ def panel_image(ax, row) -> None:
                 fontsize=10, fontweight='bold', ha='center', va='top',
                 path_effects=HALO, zorder=9,
                 arrowprops=dict(arrowstyle='->', color=DETECT, lw=1.5))
-    ax.text(pixel[0] - 1.55, pixel[1] - 1.46, r'$p^{\mathrm{img}}_{i,k}=(u,v)$',
+    ax.text(pixel[0] - 1.55, pixel[1] - 1.46, r'$q^{\mathrm{box}}_{i,k}=(u,v)$',
             color=DETECT, fontsize=11.5, fontweight='bold', ha='center', va='top',
             path_effects=HALO, zorder=9)
 
