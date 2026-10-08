@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **This is the development repository.** The final, documented version of the
+> thesis code is
+> **[JoostLeliveld/msc-thesis-camera-network-navigation](https://github.com/JoostLeliveld/msc-thesis-camera-network-navigation)**.
+> Start there: it has a code tour, a thesis-to-code map and the frozen results.
+> This repository keeps the full development history and is no longer updated.
+
 # Camera-network belief-space navigation
 
 Code for the MSc thesis *Camera-Network Modelling for Belief-Space Robot
